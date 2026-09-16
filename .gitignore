@@ -1,0 +1,39 @@
+# ---- .NET / C# ----
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+# ---- Godot ----
+# cache de import e binários do editor; o projeto se reconstrói sozinho
+godot/.godot/
+godot/.mono/
+godot/bin/
+godot/obj/
+godot/*.sln
+godot/export_presets.cfg
+
+# ---- Unity ----
+# tudo aqui é gerado pelo editor ao abrir o projeto
+unity/Library/
+unity/Temp/
+unity/Obj/
+unity/Build/
+unity/Builds/
+unity/Logs/
+unity/UserSettings/
+unity/MemoryCaptures/
+unity/Recordings/
+unity/*.csproj
+unity/*.sln
+unity/*.unityproj
+sysinfo.txt
+*.apk
+*.aab
+*.unitypackage
+
+# ---- sistema ----
+Thumbs.db
+desktop.ini
+.DS_Store

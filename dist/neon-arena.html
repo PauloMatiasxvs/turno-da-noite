@@ -1,0 +1,1547 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Neon Arena</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&display=swap">
+<style>
+:root{
+  --void:#070910;
+  --panel:rgba(10,16,28,.88);
+  --cyan:#35e0ff;
+  --mag:#ff2f87;
+  --amber:#ffb03a;
+  --ice:#dbeaf5;
+  --dim:#6f8299;
+  --red:#ff3b52;
+  --grn:#4dff9e;
+  --disp:"Chakra Petch",ui-sans-serif,"Segoe UI",system-ui,sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;background:var(--void);color:var(--ice);
+  font-family:var(--disp);-webkit-font-smoothing:antialiased;touch-action:none}
+canvas{display:block;width:100%;height:100%;background:var(--void)}
+body.playing canvas{cursor:none}
+body.playing.nolock canvas{cursor:crosshair}
+
+/* ---------- HUD ---------- */
+#hud{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .25s}
+body.playing #hud,body.paused #hud{opacity:1}
+
+#cross{position:absolute;left:50%;top:50%;width:46px;height:46px;margin:-23px 0 0 -23px}
+#cross i{position:absolute;left:50%;top:50%;background:var(--ice);box-shadow:0 0 6px rgba(53,224,255,.9);
+  transform-origin:50% 50%;opacity:.9}
+#cross i.h{width:9px;height:2px;margin-top:-1px}
+#cross i.v{width:2px;height:9px;margin-left:-1px}
+#cross i.l{margin-left:calc(-1 * var(--sp) - 9px)}
+#cross i.r{margin-left:var(--sp)}
+#cross i.u{margin-top:calc(-1 * var(--sp) - 9px)}
+#cross i.d{margin-top:var(--sp)}
+#cross .dot{width:2px;height:2px;margin:-1px 0 0 -1px;border-radius:50%}
+#cross.hit i{background:var(--red);box-shadow:0 0 8px var(--red)}
+#cross.kill i{background:var(--amber);box-shadow:0 0 10px var(--amber)}
+
+.corner{position:absolute;padding:18px 22px;display:flex;flex-direction:column;gap:6px}
+.tl{top:env(safe-area-inset-top,0px);left:0}
+.tr{top:env(safe-area-inset-top,0px);right:0;align-items:flex-end}
+.bl{bottom:env(safe-area-inset-bottom,0px);left:0}
+.br{bottom:env(safe-area-inset-bottom,0px);right:0;align-items:flex-end}
+
+.lbl{font-size:11px;letter-spacing:.22em;color:var(--dim);text-transform:uppercase}
+.big{font-size:34px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums;
+  text-shadow:0 0 18px rgba(53,224,255,.45)}
+#waveNum{color:var(--cyan)}
+#combo{font-size:15px;font-weight:700;color:var(--amber);letter-spacing:.1em;opacity:0;transition:opacity .2s}
+#combo.on{opacity:1}
+
+#hpWrap{width:230px;height:12px;background:rgba(255,255,255,.07);
+  border:1px solid rgba(53,224,255,.28);position:relative;overflow:hidden}
+#hpWrap::after{content:"";position:absolute;inset:0;
+  background:repeating-linear-gradient(90deg,transparent 0 22px,rgba(7,9,16,.85) 22px 24px)}
+#hpFill{height:100%;width:100%;background:linear-gradient(90deg,#1ad1a5,#4dff9e);
+  box-shadow:0 0 14px rgba(77,255,158,.6);transition:width .12s linear}
+#hpFill.low{background:linear-gradient(90deg,#c01430,#ff3b52);box-shadow:0 0 14px rgba(255,59,82,.65)}
+
+#ammo{font-size:40px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+#ammo small{font-size:17px;color:var(--dim);font-weight:400}
+#ammo.empty{color:var(--red)}
+#wep{font-size:12px;letter-spacing:.26em;color:var(--amber);text-transform:uppercase}
+#reload{font-size:12px;letter-spacing:.2em;color:var(--red);height:14px}
+
+#banner{position:absolute;left:0;right:0;top:26%;text-align:center;font-size:52px;font-weight:700;
+  letter-spacing:.14em;opacity:0;transform:scale(.92);transition:opacity .3s,transform .3s;
+  text-shadow:0 0 26px rgba(53,224,255,.6)}
+#banner.on{opacity:1;transform:scale(1)}
+#sub{position:absolute;left:0;right:0;top:36%;text-align:center;font-size:15px;letter-spacing:.24em;
+  color:var(--dim);opacity:0;transition:opacity .3s}
+#sub.on{opacity:1}
+
+#vig{position:absolute;inset:0;opacity:0;pointer-events:none;
+  background:radial-gradient(ellipse at center,transparent 38%,rgba(255,40,60,.75) 100%)}
+#lowhp{position:absolute;inset:0;opacity:0;pointer-events:none;
+  background:radial-gradient(ellipse at center,transparent 45%,rgba(255,30,50,.45) 100%);
+  animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.25}50%{opacity:.6}}
+
+#arrowWrap{position:absolute;left:50%;top:50%;width:0;height:0;opacity:0;transition:opacity .2s}
+#arrowWrap i{position:absolute;left:-13px;top:-120px;width:0;height:0;
+  border-left:13px solid transparent;border-right:13px solid transparent;border-bottom:20px solid var(--red);
+  filter:drop-shadow(0 0 6px rgba(255,59,82,.9))}
+
+#feed{position:absolute;right:22px;top:110px;display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+#feed div{font-size:13px;letter-spacing:.08em;color:var(--dim);animation:fadeout 2.6s forwards}
+#feed b{color:var(--cyan)}
+@keyframes fadeout{0%{opacity:0;transform:translateX(14px)}12%{opacity:1;transform:none}75%{opacity:1}100%{opacity:0}}
+
+#nolockHint{position:absolute;left:50%;bottom:44px;transform:translateX(-50%);font-size:12px;letter-spacing:.08em;color:var(--amber);background:rgba(10,16,28,.8);border:1px solid rgba(255,176,58,.3);padding:7px 14px;opacity:0;transition:opacity .3s;text-align:center;max-width:90vw}
+#nolockHint.on{opacity:1}
+#fps{position:absolute;left:50%;bottom:10px;transform:translateX(-50%);font-size:11px;color:#2d3d50;
+  letter-spacing:.1em}
+
+/* ---------- OVERLAY ---------- */
+#overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:24px;
+  background:radial-gradient(ellipse at 50% 40%,rgba(18,30,52,.55),rgba(5,7,13,.94) 70%);
+  backdrop-filter:blur(3px)}
+body.playing #overlay{display:none}
+.panel{width:min(640px,100%);background:var(--panel);border:1px solid rgba(53,224,255,.22);
+  padding:34px 34px 30px;box-shadow:0 0 60px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.05);
+  position:relative}
+.panel::before,.panel::after{content:"";position:absolute;width:16px;height:16px;border:2px solid var(--cyan)}
+.panel::before{left:-1px;top:-1px;border-right:0;border-bottom:0}
+.panel::after{right:-1px;bottom:-1px;border-left:0;border-top:0}
+h1{font-size:clamp(38px,8vw,64px);font-weight:700;letter-spacing:.06em;line-height:.95;margin-bottom:2px}
+h1 span{color:var(--cyan);text-shadow:0 0 30px rgba(53,224,255,.55)}
+.tag{font-size:12px;letter-spacing:.34em;color:var(--dim);text-transform:uppercase;margin-bottom:22px}
+.keys{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:8px 18px;margin:20px 0 26px}
+.keys div{display:flex;align-items:center;gap:9px;font-size:13px;color:#a9bece}
+kbd{font-family:var(--disp);font-size:11px;font-weight:600;letter-spacing:.06em;background:rgba(53,224,255,.1);
+  border:1px solid rgba(53,224,255,.35);color:var(--cyan);padding:3px 7px;min-width:26px;text-align:center}
+button{pointer-events:auto;font-family:var(--disp);font-size:15px;font-weight:700;letter-spacing:.2em;
+  text-transform:uppercase;color:#04121a;background:var(--cyan);border:0;padding:15px 30px;cursor:pointer;
+  box-shadow:0 0 30px rgba(53,224,255,.35);transition:transform .12s,box-shadow .12s}
+button:hover{transform:translateY(-2px);box-shadow:0 0 44px rgba(53,224,255,.6)}
+button:focus-visible{outline:2px solid var(--amber);outline-offset:3px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:14px;margin:6px 0 26px}
+.stats div{border-left:2px solid var(--mag);padding-left:12px}
+.stats b{display:block;font-size:30px;font-weight:700;font-variant-numeric:tabular-nums}
+.stats span{font-size:10px;letter-spacing:.22em;color:var(--dim);text-transform:uppercase}
+.hint{font-size:12px;color:var(--dim);margin-top:16px;letter-spacing:.05em}
+#err{display:none;color:var(--red);font-size:14px;line-height:1.6}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div id="hud">
+  <div id="cross" style="--sp:5px">
+    <i class="h l"></i><i class="h r"></i><i class="v u"></i><i class="v d"></i><i class="dot"></i>
+  </div>
+  <div class="corner tl">
+    <div class="lbl">Onda</div><div class="big" id="waveNum">1</div>
+    <div id="combo">COMBO x2</div>
+  </div>
+  <div class="corner tr">
+    <div class="lbl">Pontos</div><div class="big" id="score">0</div>
+  </div>
+  <div class="corner bl">
+    <div class="lbl">Integridade</div>
+    <div id="hpWrap"><div id="hpFill"></div></div>
+    <div id="reload"></div>
+  </div>
+  <div class="corner br">
+    <div id="wep">Rifle</div>
+    <div id="ammo">30<small>/120</small></div>
+  </div>
+  <div id="feed"></div>
+  <div id="banner"></div>
+  <div id="sub"></div>
+  <div id="vig"></div>
+  <div id="lowhp"></div>
+  <div id="arrowWrap"><i></i></div>
+  <div id="fps"></div>
+  <div id="nolockHint">Sem captura do mouse aqui: leve o cursor para as bordas para girar a cÃ¢mera</div>
+</div>
+
+<div id="overlay">
+  <div class="panel">
+    <div id="err"></div>
+    <div id="panelBody">
+      <h1>NEON <span>ARENA</span></h1>
+      <div class="tag">Sobreviva Ã s ondas Â· 3D Â· WebGL puro</div>
+      <p style="font-size:14px;line-height:1.7;color:#a9bece;max-width:52ch">
+        Drones hostis invadem a arena em ondas infinitas. Cada onda vem mais rÃ¡pida e mais pesada.
+        Acerte o <b style="color:var(--amber)">nÃºcleo brilhante</b> de um inimigo para dobrar o dano.
+      </p>
+      <div class="keys">
+        <div><kbd>W A S D</kbd> mover</div>
+        <div><kbd>Mouse</kbd> mirar</div>
+        <div><kbd>Clique</kbd> atirar</div>
+        <div><kbd>Shift</kbd> correr</div>
+        <div><kbd>EspaÃ§o</kbd> pular</div>
+        <div><kbd>R</kbd> recarregar</div>
+        <div><kbd>1</kbd> <kbd>2</kbd> trocar arma</div>
+        <div><kbd>Esc</kbd> pausar</div>
+        <div><kbd>M</kbd> mudo</div>
+      </div>
+      <button id="startBtn">Entrar na arena</button>
+      <div class="hint">O jogo captura o mouse. Aperte Esc a qualquer momento para sair.</div>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+"use strict";
+
+/* ==== src/utils.js ==== */
+/* =======================================================================
+   0 Â· UTILITÃRIOS
+   ======================================================================= */
+const $  = s => document.querySelector(s);
+const TAU = Math.PI * 2;
+const clamp = (v,a,b) => v < a ? a : v > b ? b : v;
+const lerp  = (a,b,t) => a + (b - a) * t;
+const rand  = (a,b) => a + Math.random() * (b - a);
+const randi = (a,b) => Math.floor(rand(a,b+1));
+const pick  = a => a[Math.floor(Math.random()*a.length)];
+
+const sub3 = (a,b) => [a[0]-b[0], a[1]-b[1], a[2]-b[2]];
+const add3 = (a,b) => [a[0]+b[0], a[1]+b[1], a[2]+b[2]];
+const mul3 = (a,s) => [a[0]*s, a[1]*s, a[2]*s];
+const dot3 = (a,b) => a[0]*b[0] + a[1]*b[1] + a[2]*b[2];
+const len3 = a => Math.hypot(a[0],a[1],a[2]);
+const cross3 = (a,b) => [a[1]*b[2]-a[2]*b[1], a[2]*b[0]-a[0]*b[2], a[0]*b[1]-a[1]*b[0]];
+function norm3(a){ const l = len3(a) || 1; return [a[0]/l, a[1]/l, a[2]/l]; }
+
+/* --- matrizes 4x4, column-major (formato que o OpenGL espera) --- */
+const M4 = {
+  ident(){ const o = new Float32Array(16); o[0]=o[5]=o[10]=o[15]=1; return o; },
+  mul(a,b){                                  // a * b
+    const o = new Float32Array(16);
+    for (let c=0;c<4;c++) for (let r=0;r<4;r++){
+      let s = 0;
+      for (let k=0;k<4;k++) s += a[k*4+r] * b[c*4+k];
+      o[c*4+r] = s;
+    }
+    return o;
+  },
+  persp(fovy, asp, n, f){
+    const t = 1 / Math.tan(fovy/2), o = new Float32Array(16);
+    o[0] = t/asp; o[5] = t; o[10] = (f+n)/(n-f); o[11] = -1; o[14] = 2*f*n/(n-f);
+    return o;
+  },
+  trans(x,y,z){ const o = M4.ident(); o[12]=x; o[13]=y; o[14]=z; return o; },
+  scale(x,y,z){ const o = M4.ident(); o[0]=x; o[5]=y; o[10]=z; return o; },
+  rotX(a){ const c=Math.cos(a), s=Math.sin(a), o=M4.ident(); o[5]=c;o[6]=s;o[9]=-s;o[10]=c; return o; },
+  rotY(a){ const c=Math.cos(a), s=Math.sin(a), o=M4.ident(); o[0]=c;o[2]=-s;o[8]=s;o[10]=c; return o; },
+  rotZ(a){ const c=Math.cos(a), s=Math.sin(a), o=M4.ident(); o[0]=c;o[1]=s;o[4]=-s;o[5]=c; return o; },
+  // rotaÃ§Ã£o que alinha o eixo +Z ao vetor dir (usado nos rastros de tiro)
+  alignZ(dir){
+    const z = norm3(dir);
+    const up = Math.abs(z[1]) > .995 ? [1,0,0] : [0,1,0];
+    const x = norm3(cross3(up, z));
+    const y = cross3(z, x);
+    const o = M4.ident();
+    o[0]=x[0];o[1]=x[1];o[2]=x[2];
+    o[4]=y[0];o[5]=y[1];o[6]=y[2];
+    o[8]=z[0];o[9]=z[1];o[10]=z[2];
+    return o;
+  }
+};
+const IDENT3 = new Float32Array([1,0,0, 0,1,0, 0,0,1]);
+// inversa transposta do bloco 3x3 â€” corrige normais sob escala nÃ£o uniforme
+function normalMat3(m){
+  const a00=m[0],a01=m[1],a02=m[2], a10=m[4],a11=m[5],a12=m[6], a20=m[8],a21=m[9],a22=m[10];
+  const b01 = a22*a11 - a12*a21, b11 = -a22*a10 + a12*a20, b21 = a21*a10 - a11*a20;
+  let det = a00*b01 + a01*b11 + a02*b21;
+  if (!det) return IDENT3;
+  det = 1/det;
+  const o = new Float32Array(9);
+  o[0]=b01*det;                    o[1]=(-a22*a01+a02*a21)*det;  o[2]=(a12*a01-a02*a11)*det;
+  o[3]=b11*det;                    o[4]=(a22*a00-a02*a20)*det;   o[5]=(-a12*a00+a02*a10)*det;
+  o[6]=b21*det;                    o[7]=(-a21*a00+a01*a20)*det;  o[8]=(a11*a00-a01*a10)*det;
+  return o;
+}
+
+
+/* ==== src/audio.js ==== */
+/* =======================================================================
+   2 Â· ÃUDIO â€” tudo sintetizado, zero arquivos
+   ======================================================================= */
+let AC = null, master = null, muted = false, noiseBuf = null;
+function audioInit(){
+  if (AC){ if (AC.state === "suspended") AC.resume(); return; }
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return;
+  AC = new Ctx();
+  master = AC.createGain();
+  master.gain.value = .5;
+  master.connect(AC.destination);
+  const n = AC.sampleRate * .5;
+  noiseBuf = AC.createBuffer(1, n, AC.sampleRate);
+  const d = noiseBuf.getChannelData(0);
+  for (let i=0;i<n;i++) d[i] = Math.random()*2 - 1;
+}
+function tone(f0, f1, dur, type, vol, delay){
+  if (!AC || muted) return;
+  const t = AC.currentTime + (delay||0);
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = type || "sine";
+  o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(f1,1), t + dur);
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(vol, t + .006);
+  g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  o.connect(g); g.connect(master);
+  o.start(t); o.stop(t + dur + .02);
+}
+function noise(dur, vol, f0, f1, q, delay){
+  if (!AC || muted || !noiseBuf) return;
+  const t = AC.currentTime + (delay||0);
+  const s = AC.createBufferSource(); s.buffer = noiseBuf;
+  const f = AC.createBiquadFilter(); f.type = "bandpass"; f.Q = q || 1;
+  f.frequency.setValueAtTime(f0, t);
+  f.frequency.exponentialRampToValueAtTime(Math.max(f1,20), t + dur);
+  const g = AC.createGain();
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+  s.connect(f); f.connect(g); g.connect(master);
+  s.start(t); s.stop(t + dur + .02);
+}
+const SFX = {
+  rifle(){ noise(.09,.16,2600,700,1.4); tone(240,70,.09,"sawtooth",.1); },
+  shotgun(){ noise(.26,.3,1700,180,.9); tone(150,40,.22,"square",.14); },
+  dry(){ noise(.05,.1,4000,2500,6); },
+  hit(){ tone(1500,900,.055,"square",.08); },
+  crit(){ tone(2200,1300,.09,"square",.12); tone(1100,700,.09,"sine",.07,.02); },
+  kill(){ noise(.3,.22,1400,120,.7); tone(420,60,.34,"sawtooth",.13); },
+  hurt(){ tone(180,60,.24,"square",.2); noise(.2,.14,700,120,1); },
+  pickup(){ tone(680,680,.08,"sine",.16); tone(1020,1020,.12,"sine",.14,.07); },
+  reload(){ noise(.05,.16,1800,900,4); noise(.07,.18,1200,500,3,.22); },
+  swap(){ noise(.04,.12,2200,1400,5); },
+  wave(){ tone(330,330,.5,"sawtooth",.1); tone(440,440,.5,"sawtooth",.09,.08); tone(550,550,.6,"sawtooth",.09,.16); },
+  spawn(){ tone(90,300,.3,"sine",.09); },
+  dead(){ tone(300,40,1.2,"sawtooth",.2); noise(1.0,.18,900,60,.6); },
+  bolt(){ tone(700,380,.16,"triangle",.07); }
+};
+
+
+/* Mudo Ã© estado do mÃ³dulo de Ã¡udio, nÃ£o do input â€” quem aperta M sÃ³ chama isto. */
+function toggleMute(){
+  muted = !muted;
+  if (master) master.gain.value = muted ? 0 : .5;
+  return muted;
+}
+
+/* ==== src/gl.js ==== */
+/* =======================================================================
+   1 Â· WEBGL â€” contexto, programa de shaders, malhas e desenho
+   -----------------------------------------------------------------------
+   Nada aqui depende do jogo: Ã© a camada de renderizaÃ§Ã£o crua.
+   ======================================================================= */
+
+let canvas = null;   // <canvas> do jogo
+let gl     = null;   // contexto WebGL2
+let prog   = null;   // programa de shaders Ãºnico
+const U    = {};     // localizaÃ§Ãµes dos uniforms
+const MESH = {};     // malhas estÃ¡ticas (cubo, esfera, plano)
+let W = 0, H = 0;    // tamanho do framebuffer em pixels reais
+
+const FOG = [0.035, 0.05, 0.09];
+
+/* Sobe o contexto e tudo que depende dele.
+   Retorna false quando o navegador nÃ£o tem WebGL2 â€” quem chama decide o aviso. */
+function initGL(){
+  canvas = document.getElementById("gl");
+  gl = canvas.getContext("webgl2", { antialias:true, powerPreference:"high-performance" });
+  if (!gl) return false;
+  buildProgram();
+  MESH.box    = boxGeo();
+  MESH.sphere = sphereGeo(18, 12);
+  MESH.lowSph = sphereGeo(8, 6);
+  MESH.plane  = planeGeo();
+  addEventListener("resize", resize);
+  resize();
+  return true;
+}
+
+const VS = `#version 300 es
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNor;
+uniform mat4 uProj, uView, uModel;
+uniform mat3 uNorMat;
+out vec3 vN;
+out vec3 vW;
+void main(){
+  vec4 w = uModel * vec4(aPos, 1.0);
+  vW = w.xyz;
+  vN = uNorMat * aNor;
+  gl_Position = uProj * uView * w;
+}`;
+
+const FS = `#version 300 es
+precision highp float;
+in vec3 vN;
+in vec3 vW;
+uniform vec3  uColor, uLight, uCam, uFog;
+uniform float uEmissive, uAlpha, uGrid, uFogD;
+out vec4 outColor;
+
+void main(){
+  vec3 N = normalize(vN);
+  vec3 base = uColor;
+
+  if (uGrid > 0.5){                                   // piso: grade neon procedural
+    vec2 c1 = vW.xz * 0.25;
+    vec2 g1 = abs(fract(c1 - 0.5) - 0.5) / fwidth(c1);
+    float l1 = 1.0 - min(min(g1.x, g1.y), 1.0);
+    vec2 c2 = vW.xz * 0.05;
+    vec2 g2 = abs(fract(c2 - 0.5) - 0.5) / fwidth(c2);
+    float l2 = 1.0 - min(min(g2.x, g2.y), 1.0);
+    base = mix(base, vec3(0.05, 0.42, 0.58), l1 * 0.85);
+    base = mix(base, vec3(0.25, 0.85, 1.00), l2 * 0.90);
+  }
+
+  float dif  = max(dot(N, uLight), 0.0);
+  vec3  V    = normalize(uCam - vW);
+  vec3  H    = normalize(uLight + V);
+  float spec = pow(max(dot(N, H), 0.0), 26.0) * 0.30;
+  float sky  = N.y * 0.5 + 0.5;
+  vec3  amb  = mix(vec3(0.17,0.19,0.28), vec3(0.36,0.43,0.60), sky);
+
+  // luz de preenchimento fria vinda do lado oposto: dÃ¡ volume sem clarear demais
+  float fill = max(dot(N, normalize(vec3(-uLight.x, 0.3, -uLight.z))), 0.0) * 0.40;
+  // brilho de borda (fresnel) â€” Ã© o que dÃ¡ o contorno neon na geometria
+  float rim  = pow(1.0 - max(dot(N, V), 0.0), 3.0) * 0.40;
+
+  vec3 col = base * (amb + dif * vec3(1.0,0.94,0.84) * 1.05 + fill * vec3(0.32,0.55,1.0))
+           + vec3(spec) + rim * vec3(0.16,0.48,0.72) * (1.0 - uEmissive);
+  col = mix(col, base * 1.7 + 0.15, uEmissive);
+
+  float d = length(uCam - vW);
+  float f = 1.0 - exp(-pow(max(d - 6.0, 0.0) * uFogD, 2.0));
+  col = mix(col, uFog, clamp(f, 0.0, 0.88));
+
+  outColor = vec4(col, uAlpha);
+}`;
+
+function compile(type, src){
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+
+function buildProgram(){
+  prog = gl.createProgram();
+  gl.attachShader(prog, compile(gl.VERTEX_SHADER, VS));
+  gl.attachShader(prog, compile(gl.FRAGMENT_SHADER, FS));
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(prog));
+  gl.useProgram(prog);
+  ["uProj","uView","uModel","uNorMat","uColor","uLight","uCam","uFog","uEmissive","uAlpha","uGrid","uFogD"]
+    .forEach(n => U[n] = gl.getUniformLocation(prog, n));
+}
+function makeMesh(pos, nor, idx){
+  const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+  const pb = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, pb);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pos), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+  const nb = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, nb);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(nor), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(1);
+  gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
+  const ib = gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx), gl.STATIC_DRAW);
+  gl.bindVertexArray(null);
+  return { vao, count: idx.length };
+}
+
+function boxGeo(){
+  const p=[], n=[], i=[];
+  const F = [
+    { n:[0,0,1],  v:[[-.5,-.5,.5],[.5,-.5,.5],[.5,.5,.5],[-.5,.5,.5]] },
+    { n:[0,0,-1], v:[[.5,-.5,-.5],[-.5,-.5,-.5],[-.5,.5,-.5],[.5,.5,-.5]] },
+    { n:[1,0,0],  v:[[.5,-.5,.5],[.5,-.5,-.5],[.5,.5,-.5],[.5,.5,.5]] },
+    { n:[-1,0,0], v:[[-.5,-.5,-.5],[-.5,-.5,.5],[-.5,.5,.5],[-.5,.5,-.5]] },
+    { n:[0,1,0],  v:[[-.5,.5,.5],[.5,.5,.5],[.5,.5,-.5],[-.5,.5,-.5]] },
+    { n:[0,-1,0], v:[[-.5,-.5,-.5],[.5,-.5,-.5],[.5,-.5,.5],[-.5,-.5,.5]] }
+  ];
+  F.forEach((f,k) => {
+    f.v.forEach(v => { p.push(v[0],v[1],v[2]); n.push(f.n[0],f.n[1],f.n[2]); });
+    const b = k*4;
+    i.push(b,b+1,b+2, b,b+2,b+3);
+  });
+  return makeMesh(p,n,i);
+}
+
+function sphereGeo(sg, rg){
+  const p=[], n=[], i=[];
+  for (let y=0; y<=rg; y++){
+    const phi = (y/rg) * Math.PI;
+    for (let x=0; x<=sg; x++){
+      const th = (x/sg) * TAU;
+      const nx = Math.sin(phi)*Math.cos(th), ny = Math.cos(phi), nz = Math.sin(phi)*Math.sin(th);
+      n.push(nx,ny,nz);
+      p.push(nx*.5, ny*.5, nz*.5);
+    }
+  }
+  for (let y=0; y<rg; y++) for (let x=0; x<sg; x++){
+    const a = y*(sg+1)+x, b = a+sg+1;
+    i.push(a, a+1, b, a+1, b+1, b);
+  }
+  return makeMesh(p,n,i);
+}
+
+function planeGeo(){
+  return makeMesh(
+    [-.5,0,.5, .5,0,.5, .5,0,-.5, -.5,0,-.5],
+    [0,1,0, 0,1,0, 0,1,0, 0,1,0],
+    [0,1,2, 0,2,3]
+  );
+}
+
+/* --- estado de desenho --- */
+let emis = -1, alph = -1, grid = -1;
+function draw(mesh, model, color, emissive, alpha, isGrid, fastNormals){
+  gl.uniformMatrix4fv(U.uModel, false, model);
+  gl.uniformMatrix3fv(U.uNorMat, false, fastNormals ? IDENT3 : normalMat3(model));
+  gl.uniform3f(U.uColor, color[0], color[1], color[2]);
+  const e = emissive || 0, a = alpha === undefined ? 1 : alpha, g = isGrid ? 1 : 0;
+  if (e !== emis){ gl.uniform1f(U.uEmissive, e); emis = e; }
+  if (a !== alph){ gl.uniform1f(U.uAlpha, a);   alph = a; }
+  if (g !== grid){ gl.uniform1f(U.uGrid, g);    grid = g; }
+  gl.bindVertexArray(mesh.vao);
+  gl.drawElements(gl.TRIANGLES, mesh.count, gl.UNSIGNED_SHORT, 0);
+}
+// atalho: caixa posicionada por centro + tamanho
+function drawBox(x,y,z, sx,sy,sz, color, emissive, alpha){
+  draw(MESH.box, M4.mul(M4.trans(x,y,z), M4.scale(sx,sy,sz)), color, emissive, alpha, 0, true);
+}
+
+let W = 0, H = 0;
+function resize(){
+  const dpr = Math.min(devicePixelRatio || 1, 2);
+  W = Math.floor(innerWidth * dpr);
+  H = Math.floor(innerHeight * dpr);
+  if (canvas.width !== W || canvas.height !== H){
+    canvas.width = W; canvas.height = H;
+    gl.viewport(0, 0, W, H);
+  }
+}
+
+/* O draw() sÃ³ manda um uniform para a GPU quando o valor muda; o render zera
+   esse cache no comeÃ§o de cada quadro. */
+function resetDrawCache(){ emis = alph = grid = -1; }
+
+/* ==== src/world.js ==== */
+/* =======================================================================
+   3 Â· MUNDO â€” arena, paredes, coberturas
+   ======================================================================= */
+const ARENA = 30;                       // meia-largura da arena
+const boxes = [];
+function addBox(x,y,z, sx,sy,sz, color, neon){
+  boxes.push({
+    x,y,z, sx,sy,sz, color, neon,
+    min:[x-sx/2, y-sy/2, z-sz/2],
+    max:[x+sx/2, y+sy/2, z+sz/2]
+  });
+}
+const WALL  = [0.17, 0.21, 0.31];
+const CRATE = [0.26, 0.30, 0.40];
+const PILL  = [0.21, 0.25, 0.36];
+
+function buildArena(){
+  boxes.length = 0;
+  const h = 9, t = 2;
+  addBox(0, h/2, -ARENA-t/2, ARENA*2+t*2, h, t, WALL, [0.2,.85,1]);
+  addBox(0, h/2,  ARENA+t/2, ARENA*2+t*2, h, t, WALL, [0.2,.85,1]);
+  addBox(-ARENA-t/2, h/2, 0, t, h, ARENA*2+t*2, WALL, [0.2,.85,1]);
+  addBox( ARENA+t/2, h/2, 0, t, h, ARENA*2+t*2, WALL, [0.2,.85,1]);
+
+  // pilares
+  [[-16,-16],[16,-16],[-16,16],[16,16]].forEach(p =>
+    addBox(p[0], 4, p[1], 3.4, 8, 3.4, PILL, [1,.18,.53]));
+  [[0,-22],[0,22],[-22,0],[22,0]].forEach(p =>
+    addBox(p[0], 3, p[1], 2.2, 6, 2.2, PILL, [1,.69,.23]));
+
+  // coberturas baixas
+  addBox(0, 1.4, -9, 13, 2.8, 1.6, CRATE, [.2,.85,1]);
+  addBox(0, 1.4,  9, 13, 2.8, 1.6, CRATE, [.2,.85,1]);
+  addBox(-9, 1.4, 0, 1.6, 2.8, 13, CRATE, [.2,.85,1]);
+  addBox( 9, 1.4, 0, 1.6, 2.8, 13, CRATE, [.2,.85,1]);
+
+  // engradados (dÃ¡ para subir)
+  const crates = [[-24,-6],[-21,-9],[24,7],[21,10],[-6,24],[7,-24],[13,-14],[-13,14],[25,-20],[-25,20]];
+  crates.forEach((c,k) => {
+    addBox(c[0], 1.1, c[1], 2.2, 2.2, 2.2, CRATE, [1,.69,.23]);
+    if (k % 3 === 0) addBox(c[0]+.3, 3.2, c[1]+.3, 1.8, 1.8, 1.8, CRATE, [1,.18,.53]);
+  });
+
+  // plataforma central
+  addBox(0, .55, 0, 8, 1.1, 8, PILL, [.2,.85,1]);
+}
+buildArena();
+
+function insideAnyBox(x, z, pad){
+  for (const b of boxes){
+    if (x > b.min[0]-pad && x < b.max[0]+pad && z > b.min[2]-pad && z < b.max[2]+pad) return true;
+  }
+  return false;
+}
+
+/* --- interseÃ§Ãµes --- */
+function rayAABB(o, d, mn, mx){
+  let t1 = -Infinity, t2 = Infinity;
+  for (let i=0;i<3;i++){
+    if (Math.abs(d[i]) < 1e-8){ if (o[i] < mn[i] || o[i] > mx[i]) return Infinity; }
+    else {
+      let a = (mn[i]-o[i]) / d[i], b = (mx[i]-o[i]) / d[i];
+      if (a > b){ const s = a; a = b; b = s; }
+      if (a > t1) t1 = a;
+      if (b < t2) t2 = b;
+    }
+  }
+  if (t2 < Math.max(t1, 0)) return Infinity;
+  return t1 > 0 ? t1 : (t2 > 0 ? 0 : Infinity);
+}
+function raySphere(o, d, c, r){
+  const ox = o[0]-c[0], oy = o[1]-c[1], oz = o[2]-c[2];
+  const b = ox*d[0] + oy*d[1] + oz*d[2];
+  const cc = ox*ox + oy*oy + oz*oz - r*r;
+  const disc = b*b - cc;
+  if (disc < 0) return Infinity;
+  const s = Math.sqrt(disc);
+  let t = -b - s;
+  if (t < 0) t = -b + s;
+  return t < 0 ? Infinity : t;
+}
+function blocked(a, b){                        // linha de visÃ£o obstruÃ­da?
+  const d = sub3(b, a), dist = len3(d);
+  if (dist < .001) return false;
+  const dir = mul3(d, 1/dist);
+  for (const bx of boxes) if (rayAABB(a, dir, bx.min, bx.max) < dist) return true;
+  return false;
+}
+// empurra um cÃ­rculo (x,z) para fora das caixas sÃ³lidas na altura feetY
+function pushOut(p, r, feetY, headH){
+  for (const b of boxes){
+    if (b.max[1] <= feetY + .4) continue;
+    if (b.min[1] >= feetY + headH) continue;
+    const cx = clamp(p[0], b.min[0], b.max[0]);
+    const cz = clamp(p[2], b.min[2], b.max[2]);
+    const dx = p[0]-cx, dz = p[2]-cz;
+    const d2 = dx*dx + dz*dz;
+    if (d2 >= r*r) continue;
+    const d = Math.sqrt(d2);
+    if (d < 1e-5){
+      const px = Math.min(p[0]-b.min[0], b.max[0]-p[0]);
+      const pz = Math.min(p[2]-b.min[2], b.max[2]-p[2]);
+      if (px < pz) p[0] += (p[0] < (b.min[0]+b.max[0])/2 ? -(px+r) : (px+r));
+      else         p[2] += (p[2] < (b.min[2]+b.max[2])/2 ? -(pz+r) : (pz+r));
+    } else {
+      const s = (r-d)/d;
+      p[0] += dx*s; p[2] += dz*s;
+    }
+  }
+}
+function groundAt(p, r){
+  let g = 0;
+  for (const b of boxes){
+    if (b.max[1] > p[1] + .4 || b.max[1] <= g) continue;
+    const cx = clamp(p[0], b.min[0], b.max[0]);
+    const cz = clamp(p[2], b.min[2], b.max[2]);
+    const dx = p[0]-cx, dz = p[2]-cz;
+    if (dx*dx + dz*dz < r*r) g = b.max[1];
+  }
+  return g;
+}
+
+
+/* ==== src/entities.js ==== */
+/* =======================================================================
+   4 Â· ENTIDADES
+   ======================================================================= */
+const WEAPONS = [
+  { name:"Rifle",   dmg:15, rate:.105, mag:32, ammo:32, res:160, maxRes:220, reload:1.4,
+    spread:.014, pellets:1, auto:true,  range:120, kick:.9,  sfx:"rifle",   col:[.2,.85,1] },
+  { name:"Shotgun", dmg:11, rate:.72,  mag:6,  ammo:6,  res:36,  maxRes:60,  reload:2.1,
+    spread:.075, pellets:9, auto:false, range:45,  kick:3.4, sfx:"shotgun", col:[1,.69,.23] }
+];
+
+const player = {
+  p:[0,0,20], vy:0, yaw:0, pitch:0,
+  hp:100, maxHp:100, r:.42, eye:1.68, onGround:true,
+  wep:0, fireT:0, reloadT:0, bob:0, kick:0, sway:[0,0], hurtT:0, hurtDir:0, speed:0
+};
+
+const ETYPE = {
+  drone: { hp:38,  spd:4.4, r:.72, col:[.18,.86,1],  core:[.55,1,1],   score:100, hover:1.7, ranged:true,  fire:2.2,  bolt:8  },
+  runner:{ hp:22,  spd:9.2, r:.55, col:[1,.18,.53],  core:[1,.7,.9],   score:140, hover:1.15, melee:14,    hitRate:.8 },
+  brute: { hp:180, spd:2.9, r:1.25,col:[1,.55,.14],  core:[1,.9,.5],   score:340, hover:1.9, melee:26,     hitRate:1.2 }
+};
+
+let enemies = [], bolts = [], pickups = [], parts = [], beams = [];
+
+function spawnEnemy(type, wave){
+  const T = ETYPE[type];
+  let x, z, tries = 0;
+  do {
+    const a = rand(0, TAU), d = rand(18, ARENA-4);
+    x = Math.cos(a)*d; z = Math.sin(a)*d;
+    tries++;
+  } while (tries < 40 && (insideAnyBox(x, z, 1.4) || Math.hypot(x-player.p[0], z-player.p[2]) < 14));
+
+  const scale = 1 + (wave-1) * .11;
+  enemies.push({
+    type, p:[x, T.hover, z], vel:[0,0,0],
+    hp: T.hp*scale, maxHp: T.hp*scale, r: T.r,
+    spd: T.spd * Math.min(1 + (wave-1)*.025, 1.5),
+    spin: rand(0,TAU), strafe: Math.random() < .5 ? 1 : -1,
+    fireT: rand(.6, 2.2), hitT: 0, flash: 0, birth: 0, dead: false, bob: rand(0,TAU)
+  });
+  SFX.spawn();
+  burst([x, T.hover, z], 14, T.col, 7, .5, 0);
+}
+
+function burst(p, n, col, spd, life, grav){
+  for (let i=0;i<n;i++){
+    if (parts.length > 320) break;
+    const d = norm3([rand(-1,1), rand(-1,1), rand(-1,1)]);
+    parts.push({
+      p:[p[0],p[1],p[2]],
+      v:[d[0]*rand(.3,1)*spd, d[1]*rand(.3,1)*spd + (grav?2:0), d[2]*rand(.3,1)*spd],
+      life: life*rand(.6,1.2), max: life, s: rand(.05,.16), col, g: grav
+    });
+  }
+}
+function beam(a, b, col, w){ beams.push({ a, b, col, w: w||.02, life: .055, max: .055 }); }
+
+function dropPickup(p){
+  const r = Math.random();
+  let kind = null;
+  if (player.hp < 55 && r < .42) kind = "hp";
+  else if (r < .16) kind = "hp";
+  else if (r < .48) kind = "ammo";
+  if (!kind) return;
+  pickups.push({ p:[p[0], .8, p[2]], kind, t: rand(0,TAU), life: 22 });
+}
+
+
+/* ==== src/game-state.js ==== */
+/* =======================================================================
+   5 Â· ESTADO DO JOGO
+   ======================================================================= */
+const G = {
+  state:"menu", wave:0, score:0, kills:0, shots:0, hits:0,
+  combo:1, comboT:0, queue:[], betweenT:0, time:0, best:0, hitMark:0, killMark:0
+};
+try { G.best = parseInt(localStorage.getItem("neonArenaBest") || "0", 10) || 0; } catch(e){}
+
+function banner(text, subText, hold){
+  const b = $("#banner"), s = $("#sub");
+  b.textContent = text; b.classList.add("on");
+  s.textContent = subText || ""; s.classList.toggle("on", !!subText);
+  clearTimeout(banner._t);
+  banner._t = setTimeout(() => { b.classList.remove("on"); s.classList.remove("on"); }, hold || 1600);
+}
+function feed(html){
+  const d = document.createElement("div");
+  d.innerHTML = html;
+  $("#feed").appendChild(d);
+  setTimeout(() => d.remove(), 2600);
+}
+
+function startWave(n){
+  G.wave = n;
+  G.queue = [];
+  const count = Math.min(4 + Math.round(n * 1.7), 28);
+  let t = 0;
+  for (let i=0;i<count;i++){
+    let type = "drone";
+    const r = Math.random();
+    if (n >= 2 && r < .38) type = "runner";
+    if (n >= 3 && r > .88) type = "brute";
+    if (n >= 7 && r > .78) type = "brute";
+    G.queue.push({ type, t });
+    t += rand(.2, .75);
+  }
+  banner("ONDA " + n, count + " HOSTIS DETECTADOS", 2000);
+  SFX.wave();
+}
+
+function startGame(){
+  buildArena();
+  // esvazia no lugar: outros mÃ³dulos guardam a referÃªncia destes arrays
+  [enemies, bolts, pickups, parts, beams].forEach(a => { a.length = 0; });
+  player.p = [0, 0, 20]; player.vy = 0; player.yaw = 0; player.pitch = 0;
+  player.hp = player.maxHp; player.wep = 0; player.fireT = 0; player.reloadT = 0;
+  player.kick = 0; player.hurtT = 0;
+  WEAPONS.forEach(w => { w.ammo = w.mag; });
+  WEAPONS[0].res = 160; WEAPONS[1].res = 36;
+  G.score = 0; G.kills = 0; G.shots = 0; G.hits = 0; G.combo = 1; G.comboT = 0;
+  G.betweenT = 2.4; G.wave = 0; G.state = "play";
+  $("#feed").innerHTML = "";
+  document.body.classList.add("playing");
+  document.body.classList.remove("paused");
+  banner("PREPARE-SE", "", 1800);
+}
+
+function gameOver(){
+  G.state = "dead";
+  SFX.dead();
+  document.body.classList.remove("playing");
+  if (G.score > G.best){
+    G.best = G.score;
+    try { localStorage.setItem("neonArenaBest", String(G.best)); } catch(e){}
+  }
+  if (document.pointerLockElement) document.exitPointerLock();
+  const acc = G.shots ? Math.round(G.hits / G.shots * 100) : 0;
+  $("#panelBody").innerHTML = `
+    <h1>SISTEMA <span style="color:var(--red);text-shadow:0 0 30px rgba(255,59,82,.5)">OFFLINE</span></h1>
+    <div class="tag">VocÃª caiu na onda ${G.wave}</div>
+    <div class="stats">
+      <div><b>${G.score.toLocaleString("pt-BR")}</b><span>Pontos</span></div>
+      <div><b>${G.wave}</b><span>Ondas</span></div>
+      <div><b>${G.kills}</b><span>Abates</span></div>
+      <div><b>${acc}%</b><span>PrecisÃ£o</span></div>
+    </div>
+    <div class="tag" style="margin-bottom:22px">Recorde: ${G.best.toLocaleString("pt-BR")} pts</div>
+    <button id="startBtn">Tentar de novo</button>`;
+  bindStart();
+}
+
+function pauseGame(){
+  if (G.state !== "play") return;
+  G.state = "pause";
+  document.body.classList.remove("playing");
+  document.body.classList.add("paused");
+  $("#panelBody").innerHTML = `
+    <h1>EM <span>PAUSA</span></h1>
+    <div class="tag">Onda ${G.wave} Â· ${G.score.toLocaleString("pt-BR")} pontos</div>
+    <div class="keys">
+      <div><kbd>W A S D</kbd> mover</div><div><kbd>Mouse</kbd> mirar</div>
+      <div><kbd>Clique</kbd> atirar</div><div><kbd>Shift</kbd> correr</div>
+      <div><kbd>EspaÃ§o</kbd> pular</div><div><kbd>R</kbd> recarregar</div>
+      <div><kbd>1</kbd> <kbd>2</kbd> trocar arma</div><div><kbd>M</kbd> mudo</div>
+    </div>
+    <button id="startBtn">Continuar</button>`;
+  bindStart();
+}
+function resumeGame(){
+  G.state = "play";
+  document.body.classList.add("playing");
+  document.body.classList.remove("paused");
+  lockPointer();
+}
+
+function bindStart(){
+  const b = $("#startBtn");
+  if (!b) return;
+  b.onclick = () => {
+    audioInit();
+    if (G.state === "pause") resumeGame();
+    else { startGame(); lockPointer(); }
+  };
+}
+// bindStart() Ã© chamado pelo main.js, depois que o WebGL sobe
+
+
+/* ==== src/combat.js ==== */
+/* =======================================================================
+   7 Â· COMBATE
+   ======================================================================= */
+function camDir(){
+  const cy = Math.cos(player.pitch), sy = Math.sin(player.pitch);
+  return [ -Math.sin(player.yaw)*cy, sy, -Math.cos(player.yaw)*cy ];
+}
+function eyePos(){ return [ player.p[0], player.p[1] + player.eye, player.p[2] ]; }
+
+function swapTo(i){
+  if (i === player.wep || player.reloadT > 0) return;
+  player.wep = i;
+  player.fireT = Math.max(player.fireT, .25);
+  SFX.swap();
+}
+function startReload(){
+  const w = WEAPONS[player.wep];
+  if (player.reloadT > 0 || w.ammo >= w.mag || w.res <= 0) return;
+  player.reloadT = w.reload;
+  SFX.reload();
+}
+function finishReload(){
+  const w = WEAPONS[player.wep];
+  const need = Math.min(w.mag - w.ammo, w.res);
+  w.ammo += need; w.res -= need;
+}
+
+function addScore(n){
+  G.score += Math.round(n * G.combo);
+}
+
+function tryFire(){
+  const w = WEAPONS[player.wep];
+  if (player.fireT > 0 || player.reloadT > 0) return;
+  if (w.ammo <= 0){
+    player.fireT = .3;
+    SFX.dry();
+    if (w.res > 0) startReload();
+    return;
+  }
+  w.ammo--;
+  player.fireT = w.rate;
+  player.kick = Math.min(player.kick + w.kick, 6);
+  player.pitch = clamp(player.pitch + w.kick * .0055, -1.45, 1.45);
+  SFX[w.sfx]();
+  G.shots++;
+
+  const o = eyePos(), d = camDir();
+  const right = norm3(cross3(d, [0,1,0]));
+  const up = cross3(right, d);
+  let anyHit = false;
+
+  for (let i=0;i<w.pellets;i++){
+    const sx = (Math.random()+Math.random()-1) * w.spread;
+    const sy = (Math.random()+Math.random()-1) * w.spread;
+    const dir = norm3([
+      d[0] + right[0]*sx + up[0]*sy,
+      d[1] + right[1]*sx + up[1]*sy,
+      d[2] + right[2]*sx + up[2]*sy
+    ]);
+
+    let best = w.range, target = null;
+    for (const b of boxes){
+      const t = rayAABB(o, dir, b.min, b.max);
+      if (t < best){ best = t; target = null; }
+    }
+    for (const e of enemies){
+      if (e.dead || e.birth < .25) continue;
+      const t = raySphere(o, dir, e.p, e.r);
+      if (t < best){ best = t; target = e; }
+    }
+
+    const hp = [ o[0]+dir[0]*best, o[1]+dir[1]*best, o[2]+dir[2]*best ];
+    beam(add3(o, mul3(dir, .6)), hp, target ? [1,.85,.4] : [.55,.8,1], target ? .035 : .018);
+
+    if (target){
+      // acerto no nÃºcleo (centro da esfera) causa dano dobrado
+      const dc = len3(sub3(hp, target.p));
+      const crit = dc < target.r * .5;
+      damageEnemy(target, w.dmg * (crit ? 2 : 1), dir, crit);
+      anyHit = true;
+      burst(hp, crit ? 9 : 5, crit ? [1,.9,.45] : ETYPE[target.type].col, 5, .3, 0);
+    } else if (best < w.range){
+      burst(hp, 4, [.6,.8,1], 3.5, .26, 1);
+    }
+  }
+  if (anyHit) G.hits++;
+}
+
+function damageEnemy(e, dmg, dir, crit){
+  if (e.dead) return;
+  e.hp -= dmg;
+  e.flash = 1;
+  e.vel[0] += dir[0] * (crit ? 5 : 2.6) / (e.r*2);
+  e.vel[2] += dir[2] * (crit ? 5 : 2.6) / (e.r*2);
+  if (crit) SFX.crit(); else SFX.hit();
+  G.hitMark = .12;
+  if (e.hp <= 0) killEnemy(e);
+}
+
+function killEnemy(e){
+  e.dead = true;
+  const T = ETYPE[e.type];
+  G.kills++;
+  addScore(T.score);                       // pontua com o combo atual...
+  G.comboT = 3.2;
+  G.combo = Math.min(G.combo + 1, 8);      // ...e sÃ³ depois sobe o multiplicador
+  SFX.kill();
+  G.killMark = .2;
+  burst(e.p, 26, T.col, 9, .7, 1);
+  burst(e.p, 10, T.core, 12, .5, 0);
+  dropPickup(e.p);
+  if (G.combo >= 3) feed(`<b>x${G.combo}</b> ${e.type.toUpperCase()}`);
+}
+
+function hurtPlayer(dmg, from){
+  if (G.state !== "play") return;
+  player.hp -= dmg;
+  player.hurtT = .45;
+  const d = norm3([ from[0]-player.p[0], 0, from[2]-player.p[2] ]);
+  const f = [ -Math.sin(player.yaw), 0, -Math.cos(player.yaw) ];
+  const r = [  Math.cos(player.yaw), 0, -Math.sin(player.yaw) ];
+  player.hurtDir = Math.atan2(dot3(d, r), dot3(d, f));
+  G.combo = 1; G.comboT = 0;
+  SFX.hurt();
+  if (player.hp <= 0){ player.hp = 0; gameOver(); }
+}
+
+
+/* ==== src/input.js ==== */
+/* =======================================================================
+   6 Â· ENTRADA
+   ======================================================================= */
+const keys = {};
+let mouseDown = false, noLock = false, lastMX = 0, lastMY = 0, haveLast = false;
+const SENS = .0022;
+
+addEventListener("keydown", e => {
+  if (e.code === "Escape") return;
+  if (["Space","KeyW","KeyA","KeyS","KeyD","Tab","KeyR"].indexOf(e.code) >= 0) e.preventDefault();
+  if (keys[e.code]) return;
+  keys[e.code] = true;
+  if (G.state !== "play") return;
+  if (e.code === "KeyR") startReload();
+  if (e.code === "Digit1") swapTo(0);
+  if (e.code === "Digit2") swapTo(1);
+  if (e.code === "KeyM"){
+    feed(toggleMute() ? "<b>SOM</b> desligado" : "<b>SOM</b> ligado");
+  }
+});
+addEventListener("keyup", e => { keys[e.code] = false; });
+addEventListener("blur", () => { for (const k in keys) keys[k] = false; mouseDown = false; });
+
+canvas.addEventListener("mousedown", e => {
+  if (G.state === "play" && e.button === 0){ mouseDown = true; e.preventDefault(); }
+});
+addEventListener("mouseup", e => { if (e.button === 0) mouseDown = false; });
+addEventListener("contextmenu", e => { if (G.state === "play") e.preventDefault(); });
+
+// Sem captura de ponteiro (ex.: rodando dentro de um iframe) o mouse esbarra na
+// borda da janela. Nesse caso a posiÃ§Ã£o do cursor vira *velocidade* de giro,
+// como um analÃ³gico: afastou do centro, a cÃ¢mera gira para aquele lado.
+let aimX = 0, aimY = 0;
+addEventListener("mousemove", e => {
+  if (G.state !== "play") return;
+  if (document.pointerLockElement === canvas){
+    player.yaw   -= e.movementX * SENS;
+    player.pitch -= e.movementY * SENS;
+    player.pitch  = clamp(player.pitch, -1.45, 1.45);
+  } else if (noLock){
+    // janela minimizada ou ainda sem layout reporta 0 â€” sem o guarda isso vira NaN
+    const vw = innerWidth || 1, vh = innerHeight || 1;
+    aimX = clamp((e.clientX / vw) * 2 - 1, -1, 1);
+    aimY = clamp((e.clientY / vh) * 2 - 1, -1, 1);
+    if (!haveLast){ haveLast = true; document.body.classList.add("nolock"); $("#nolockHint").classList.add("on"); }
+  }
+});
+function aimDrift(dt){
+  if (!noLock || document.pointerLockElement) return;
+  const dz = .14;
+  const ax = Math.abs(aimX) > dz ? Math.sign(aimX) * (Math.abs(aimX)-dz) / (1-dz) : 0;
+  const ay = Math.abs(aimY) > dz ? Math.sign(aimY) * (Math.abs(aimY)-dz) / (1-dz) : 0;
+  player.yaw   -= ax * ax * Math.sign(ax) * 3.4 * dt;
+  player.pitch -= ay * ay * Math.sign(ay) * 2.2 * dt;
+  player.pitch  = clamp(player.pitch, -1.45, 1.45);
+}
+
+function lockPointer(){
+  haveLast = false;
+  if (!canvas.requestPointerLock){ noLock = true; return; }
+  try {
+    const req = canvas.requestPointerLock();
+    if (req && req.catch) req.catch(() => { noLock = true; });
+  } catch(e){ noLock = true; }
+}
+document.addEventListener("pointerlockerror", () => { noLock = true; });
+document.addEventListener("pointerlockchange", () => {
+  if (!document.pointerLockElement && G.state === "play" && !noLock) pauseGame();
+});
+
+
+/* ==== src/update.js ==== */
+/* =======================================================================
+   8 Â· ATUALIZAÃ‡ÃƒO
+   ======================================================================= */
+function updatePlayer(dt){
+  aimDrift(dt);
+  const sprint = keys.ShiftLeft || keys.ShiftRight;
+  const spd = sprint ? 10.6 : 7.1;
+  const f = [ -Math.sin(player.yaw), 0, -Math.cos(player.yaw) ];
+  const r = [  Math.cos(player.yaw), 0, -Math.sin(player.yaw) ];
+  let mx = 0, mz = 0;
+  if (keys.KeyW) { mx += f[0]; mz += f[2]; }
+  if (keys.KeyS) { mx -= f[0]; mz -= f[2]; }
+  if (keys.KeyD) { mx += r[0]; mz += r[2]; }
+  if (keys.KeyA) { mx -= r[0]; mz -= r[2]; }
+  const ml = Math.hypot(mx, mz);
+  if (ml > 0){ mx = mx/ml*spd; mz = mz/ml*spd; }
+  player.speed = ml > 0 ? spd : 0;
+
+  // vertical
+  player.vy -= 23 * dt;
+  player.p[1] += player.vy * dt;
+  const g = groundAt(player.p, player.r);
+  if (player.p[1] <= g){
+    player.p[1] = g;
+    if (player.vy < -11) burst([player.p[0], g+.1, player.p[2]], 6, [.4,.7,1], 3, .25, 1);
+    player.vy = 0;
+    player.onGround = true;
+  } else player.onGround = false;
+
+  if (keys.Space && player.onGround){
+    player.vy = 8.1;
+    player.onGround = false;
+  }
+
+  // horizontal + colisÃ£o
+  player.p[0] += mx * dt;
+  player.p[2] += mz * dt;
+  pushOut(player.p, player.r, player.p[1], 1.7);
+  player.p[0] = clamp(player.p[0], -ARENA+.6, ARENA-.6);
+  player.p[2] = clamp(player.p[2], -ARENA+.6, ARENA-.6);
+
+  // balanÃ§o de passos
+  if (ml > 0 && player.onGround) player.bob += dt * (sprint ? 13 : 9.5);
+  else player.bob = lerp(player.bob, Math.round(player.bob/Math.PI)*Math.PI, dt*6);
+
+  // armas
+  player.fireT = Math.max(0, player.fireT - dt);
+  player.kick  = lerp(player.kick, 0, dt*11);
+  if (player.reloadT > 0){
+    player.reloadT -= dt;
+    if (player.reloadT <= 0){ player.reloadT = 0; finishReload(); }
+  }
+  const w = WEAPONS[player.wep];
+  if (mouseDown && (w.auto || !player._held)) tryFire();
+  player._held = mouseDown;
+  if (w.ammo === 0 && w.res > 0 && player.reloadT === 0) startReload();
+
+  // pickups
+  for (let i = pickups.length-1; i>=0; i--){
+    const pk = pickups[i];
+    pk.t += dt; pk.life -= dt;
+    if (pk.life <= 0){ pickups.splice(i,1); continue; }
+    if (Math.hypot(pk.p[0]-player.p[0], pk.p[2]-player.p[2]) < 1.5 &&
+        Math.abs(pk.p[1]-player.p[1]-.8) < 2.2){
+      if (pk.kind === "hp"){
+        player.hp = Math.min(player.maxHp, player.hp + 32);
+        feed("<b>+32</b> integridade");
+      } else {
+        WEAPONS[0].res = Math.min(WEAPONS[0].maxRes, WEAPONS[0].res + 60);
+        WEAPONS[1].res = Math.min(WEAPONS[1].maxRes, WEAPONS[1].res + 10);
+        feed("<b>MUNIÃ‡ÃƒO</b> reabastecida");
+      }
+      SFX.pickup();
+      burst(pk.p, 12, pk.kind === "hp" ? [.3,1,.62] : [1,.69,.23], 5, .4, 0);
+      pickups.splice(i,1);
+    }
+  }
+}
+
+function updateEnemies(dt){
+  const ppos = [ player.p[0], player.p[1]+1.0, player.p[2] ];
+  for (let i = enemies.length-1; i>=0; i--){
+    const e = enemies[i];
+    if (e.dead){ enemies.splice(i,1); continue; }
+    const T = ETYPE[e.type];
+    e.birth = Math.min(1, e.birth + dt*1.8);
+    e.flash = Math.max(0, e.flash - dt*4);
+    e.spin += dt * (e.type === "runner" ? 7 : 2.2);
+    e.bob  += dt * 2.4;
+    e.hitT = Math.max(0, e.hitT - dt);
+
+    const toP = [ ppos[0]-e.p[0], 0, ppos[2]-e.p[2] ];
+    const dist = Math.hypot(toP[0], toP[2]) || .001;
+    const dir = [ toP[0]/dist, 0, toP[2]/dist ];
+    const side = [ -dir[2], 0, dir[0] ];
+
+    let wish = [0,0,0];
+    if (T.ranged){
+      const want = 13;
+      const f = dist > want + 3 ? 1 : dist < want - 4 ? -1 : 0;
+      wish = [ dir[0]*f + side[0]*e.strafe*.85, 0, dir[2]*f + side[2]*e.strafe*.85 ];
+      e.fireT -= dt;
+      if (e.birth >= 1 && e.fireT <= 0 && dist < 34 && !blocked(e.p, ppos)){
+        e.fireT = T.fire * rand(.8, 1.3);
+        const bd = norm3(sub3([ppos[0], ppos[1]+rand(-.2,.2), ppos[2]], e.p));
+        bolts.push({ p:[e.p[0],e.p[1],e.p[2]], v: mul3(bd, 17), life: 3.2, dmg: T.bolt, col: T.core });
+        SFX.bolt();
+      }
+    } else {
+      wish = [ dir[0], 0, dir[2] ];
+      if (dist < e.r + .95){
+        if (e.hitT <= 0){
+          e.hitT = T.hitRate;
+          hurtPlayer(T.melee, e.p);
+          burst([ (e.p[0]+ppos[0])/2, ppos[1], (e.p[2]+ppos[2])/2 ], 10, T.col, 6, .3, 0);
+        }
+        wish = [0,0,0];
+      }
+    }
+    if (Math.random() < dt * .5) e.strafe *= -1;
+
+    e.vel[0] = lerp(e.vel[0], wish[0]*e.spd, dt*3.5);
+    e.vel[2] = lerp(e.vel[2], wish[2]*e.spd, dt*3.5);
+    e.p[0] += e.vel[0]*dt;
+    e.p[2] += e.vel[2]*dt;
+    e.p[1] = T.hover + Math.sin(e.bob)*.22;
+
+    pushOut(e.p, e.r, e.p[1]-T.hover*.5, .1);
+    e.p[0] = clamp(e.p[0], -ARENA+e.r, ARENA-e.r);
+    e.p[2] = clamp(e.p[2], -ARENA+e.r, ARENA-e.r);
+  }
+}
+
+function updateBolts(dt){
+  const pc = [ player.p[0], player.p[1]+1.0, player.p[2] ];
+  for (let i = bolts.length-1; i>=0; i--){
+    const b = bolts[i];
+    b.life -= dt;
+    const np = add3(b.p, mul3(b.v, dt));
+    let hit = false;
+    if (len3(sub3(np, pc)) < .85){ hurtPlayer(b.dmg, b.p); hit = true; }
+    if (!hit){
+      for (const bx of boxes){
+        if (np[0] > bx.min[0] && np[0] < bx.max[0] && np[1] > bx.min[1] &&
+            np[1] < bx.max[1] && np[2] > bx.min[2] && np[2] < bx.max[2]){ hit = true; break; }
+      }
+    }
+    b.p = np;
+    if (hit || b.life <= 0 || Math.abs(b.p[0]) > ARENA+2 || Math.abs(b.p[2]) > ARENA+2 || b.p[1] < 0){
+      burst(b.p, 7, b.col, 4, .25, 0);
+      bolts.splice(i,1);
+    }
+  }
+}
+
+function updateFx(dt){
+  for (let i = parts.length-1; i>=0; i--){
+    const p = parts[i];
+    p.life -= dt;
+    if (p.life <= 0){ parts.splice(i,1); continue; }
+    if (p.g) p.v[1] -= 16*dt;
+    p.p[0] += p.v[0]*dt; p.p[1] += p.v[1]*dt; p.p[2] += p.v[2]*dt;
+    if (p.p[1] < .06 && p.g){ p.p[1] = .06; p.v[1] *= -.34; p.v[0] *= .7; p.v[2] *= .7; }
+  }
+  for (let i = beams.length-1; i>=0; i--){
+    beams[i].life -= dt;
+    if (beams[i].life <= 0) beams.splice(i,1);
+  }
+}
+
+function updateWaves(dt){
+  if (G.queue.length === 0 && enemies.length === 0){
+    if (G.betweenT > 0){
+      const before = Math.ceil(G.betweenT);
+      G.betweenT -= dt;
+      const now = Math.ceil(G.betweenT);
+      if (G.wave > 0 && now !== before && now > 0) banner("ONDA LIMPA", "PRÃ“XIMA EM " + now, 1200);
+      if (G.betweenT <= 0){
+        if (G.wave > 0){
+          addScore(250 + G.wave*120);
+          WEAPONS[0].res = Math.min(WEAPONS[0].maxRes, WEAPONS[0].res + 50);
+          WEAPONS[1].res = Math.min(WEAPONS[1].maxRes, WEAPONS[1].res + 8);
+          player.hp = Math.min(player.maxHp, player.hp + 14);
+        }
+        startWave(G.wave + 1);
+      }
+    }
+  } else if (G.queue.length){
+    for (let i = G.queue.length-1; i>=0; i--){
+      G.queue[i].t -= dt;
+      if (G.queue[i].t <= 0){
+        spawnEnemy(G.queue[i].type, G.wave);
+        G.queue.splice(i,1);
+      }
+    }
+    if (G.queue.length === 0) G.betweenT = 4.0;
+  }
+}
+
+
+/* ==== src/hud.js ==== */
+/* =======================================================================
+   9 Â· HUD
+   ======================================================================= */
+const elWave = $("#waveNum"), elScore = $("#score"), elHp = $("#hpFill"),
+      elAmmo = $("#ammo"), elWep = $("#wep"), elReload = $("#reload"),
+      elCombo = $("#combo"), elCross = $("#cross"), elVig = $("#vig"),
+      elLow = $("#lowhp"), elArrow = $("#arrowWrap"), elFps = $("#fps");
+
+function updateHud(dt){
+  const w = WEAPONS[player.wep];
+  elWave.textContent = G.wave;
+  elScore.textContent = G.score.toLocaleString("pt-BR");
+  const hpPct = clamp(player.hp / player.maxHp, 0, 1);
+  elHp.style.width = (hpPct*100) + "%";
+  elHp.classList.toggle("low", hpPct < .35);
+  elAmmo.innerHTML = w.ammo + "<small>/" + w.res + "</small>";
+  elAmmo.classList.toggle("empty", w.ammo === 0);
+  elWep.textContent = w.name;
+  elReload.textContent = player.reloadT > 0 ? "RECARREGANDO" : (w.ammo === 0 ? "APERTE R" : "");
+
+  G.comboT = Math.max(0, G.comboT - dt);
+  if (G.comboT === 0) G.combo = 1;
+  elCombo.textContent = "COMBO x" + G.combo;
+  elCombo.classList.toggle("on", G.combo > 1);
+
+  // mira: abre com o movimento e com a dispersÃ£o da arma
+  const spread = 5 + w.spread*190 + player.kick*2.2 + (player.speed > 8 ? 4 : player.speed > 0 ? 2 : 0);
+  elCross.style.setProperty("--sp", spread.toFixed(1) + "px");
+  G.hitMark = Math.max(0, G.hitMark - dt);
+  G.killMark = Math.max(0, G.killMark - dt);
+  elCross.classList.toggle("hit", G.hitMark > 0 && G.killMark === 0);
+  elCross.classList.toggle("kill", G.killMark > 0);
+
+  player.hurtT = Math.max(0, player.hurtT - dt);
+  elVig.style.opacity = (player.hurtT / .45 * .9).toFixed(2);
+  elArrow.style.opacity = player.hurtT > 0 ? "1" : "0";
+  elArrow.style.transform = "rotate(" + player.hurtDir + "rad)";
+  elLow.style.opacity = hpPct < .3 ? "1" : "0";
+}
+
+
+/* ==== src/render.js ==== */
+/* =======================================================================
+   10 Â· RENDER
+   ======================================================================= */
+const LIGHT = norm3([ .45, .82, .36 ]);
+const VM_LIGHT = norm3([ .4, .55, .75 ]);
+
+function render(){
+  const aspect = H > 0 ? W / H : 1;
+  const fov = (72 + (player.speed > 8 ? 4 : 0)) * Math.PI/180;
+  const proj = M4.persp(fov, aspect, .05, 400);
+
+  const bobY = Math.sin(player.bob) * .045;
+  const bobX = Math.cos(player.bob*.5) * .035;
+  const eye = [ player.p[0] + bobX*.25, player.p[1] + player.eye + bobY, player.p[2] ];
+  const roll = Math.cos(player.bob*.5) * .006;
+  const view = M4.mul(M4.mul(M4.mul(M4.rotZ(roll), M4.rotX(-player.pitch)), M4.rotY(-player.yaw)),
+                      M4.trans(-eye[0], -eye[1], -eye[2]));
+
+  gl.enable(gl.DEPTH_TEST);
+  gl.enable(gl.CULL_FACE);
+  gl.disable(gl.BLEND);
+  gl.depthMask(true);
+  gl.clearColor(FOG[0], FOG[1], FOG[2], 1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+  gl.uniformMatrix4fv(U.uProj, false, proj);
+  gl.uniformMatrix4fv(U.uView, false, view);
+  gl.uniform3f(U.uCam, eye[0], eye[1], eye[2]);
+  gl.uniform3f(U.uLight, LIGHT[0], LIGHT[1], LIGHT[2]);
+  gl.uniform3f(U.uFog, FOG[0], FOG[1], FOG[2]);
+  gl.uniform1f(U.uFogD, .0145);
+  resetDrawCache();
+
+  // piso
+  draw(MESH.plane, M4.mul(M4.trans(0,0,0), M4.scale(420,1,420)), [.085,.11,.17], 0, 1, 1, true);
+
+  // geometria da arena + faixa neon no topo
+  for (const b of boxes){
+    drawBox(b.x, b.y, b.z, b.sx, b.sy, b.sz, b.color, 0, 1);
+    if (b.neon) drawBox(b.x, b.y + b.sy/2 + .045, b.z, b.sx*1.01, .09, b.sz*1.01, b.neon, 1, 1);
+  }
+
+  // coletÃ¡veis
+  for (const pk of pickups){
+    const col = pk.kind === "hp" ? [.25,1,.6] : [1,.69,.23];
+    const y = pk.p[1] + Math.sin(pk.t*2.6)*.18;
+    const blink = pk.life < 4 && Math.sin(pk.life*18) < 0;
+    if (blink) continue;
+    const m = M4.mul(M4.mul(M4.trans(pk.p[0], y, pk.p[2]), M4.rotY(pk.t*1.7)), M4.scale(.42,.42,.42));
+    draw(MESH.box, m, col, .55, 1, 0, false);
+    const m2 = M4.mul(M4.mul(M4.trans(pk.p[0], y, pk.p[2]), M4.rotY(-pk.t*2.3)), M4.scale(.62,.06,.62));
+    draw(MESH.box, m2, col, 1, 1, 0, false);
+  }
+
+  // inimigos
+  for (const e of enemies){
+    const T = ETYPE[e.type];
+    const s = .3 + .7 * Math.min(1, e.birth*1.4);
+    let col = T.col;
+    if (e.flash > 0) col = [ lerp(col[0],1,e.flash), lerp(col[1],1,e.flash), lerp(col[2],1,e.flash) ];
+    const face = Math.atan2(e.vel[0], e.vel[2]);
+
+    if (e.type === "drone"){
+      const body = M4.mul(M4.mul(M4.mul(M4.trans(e.p[0],e.p[1],e.p[2]), M4.rotY(e.spin)),
+                                 M4.rotZ(.22)), M4.scale(1.05*s, .5*s, 1.05*s));
+      draw(MESH.box, body, col, e.flash*.8, 1, 0, false);
+      const ring = M4.mul(M4.mul(M4.trans(e.p[0], e.p[1], e.p[2]), M4.rotY(-e.spin*1.7)),
+                          M4.scale(1.7*s, .07*s, 1.7*s));
+      draw(MESH.box, ring, T.core, 1, 1, 0, false);
+    } else if (e.type === "runner"){
+      const body = M4.mul(M4.mul(M4.mul(M4.trans(e.p[0],e.p[1],e.p[2]), M4.rotY(face)),
+                                 M4.rotX(.3)), M4.scale(.52*s, .52*s, 1.2*s));
+      draw(MESH.box, body, col, e.flash*.8, 1, 0, false);
+      const fin = M4.mul(M4.mul(M4.trans(e.p[0], e.p[1]+.35*s, e.p[2]), M4.rotY(face)),
+                         M4.scale(.12*s, .5*s, .7*s));
+      draw(MESH.box, fin, T.core, .9, 1, 0, false);
+      if (Math.random() < .5) burst([e.p[0], e.p[1]-.2, e.p[2]], 1, T.col, 1.2, .22, 0);
+    } else {
+      const body = M4.mul(M4.mul(M4.trans(e.p[0],e.p[1],e.p[2]), M4.rotY(e.spin*.5)),
+                          M4.scale(1.9*s, 1.7*s, 1.9*s));
+      draw(MESH.box, body, col, e.flash*.8, 1, 0, false);
+      for (let k=0;k<4;k++){
+        const a = e.spin + k*Math.PI/2;
+        const m = M4.mul(M4.mul(M4.trans(e.p[0]+Math.cos(a)*1.25*s, e.p[1]+.9*s, e.p[2]+Math.sin(a)*1.25*s),
+                                M4.rotY(a)), M4.scale(.3*s,.3*s,.3*s));
+        draw(MESH.box, m, T.core, 1, 1, 0, false);
+      }
+    }
+    // nÃºcleo (ponto de dano dobrado)
+    const pulse = 1 + Math.sin(G.time*7 + e.bob)*.07;
+    const core = M4.mul(M4.trans(e.p[0], e.p[1], e.p[2]), M4.scale(T.r*.88*s*pulse, T.r*.88*s*pulse, T.r*.88*s*pulse));
+    draw(MESH.sphere, core, T.core, 1, 1, 0, false);
+
+    // barra de vida flutuante
+    if (e.hp < e.maxHp){
+      const wq = e.hp / e.maxHp;
+      const yy = e.p[1] + T.r + .75;
+      drawBox(e.p[0], yy, e.p[2], 1.5, .1, .04, [.05,.06,.09], 0, 1);
+      drawBox(e.p[0] - (1.44*(1-wq))/2, yy, e.p[2], 1.44*wq, .07, .06,
+              wq > .5 ? [.2,1,.65] : [1,.3,.35], 1, 1);
+    }
+  }
+
+  // projÃ©teis inimigos
+  for (const b of bolts){
+    draw(MESH.lowSph, M4.mul(M4.trans(b.p[0],b.p[1],b.p[2]), M4.scale(.34,.34,.34)), b.col, 1, 1, 0, true);
+  }
+
+  /* --- passes com transparÃªncia --- */
+  gl.enable(gl.BLEND);
+  gl.depthMask(false);
+
+  // sombras de contato
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+  for (const e of enemies){
+    const sc = ETYPE[e.type].r * 3.2 * clamp(1 - e.p[1]/9, .25, 1);
+    draw(MESH.plane, M4.mul(M4.trans(e.p[0], .03, e.p[2]), M4.scale(sc,1,sc)), [0,0,0], 0, .32, 0, true);
+  }
+  for (const pk of pickups){
+    draw(MESH.plane, M4.mul(M4.trans(pk.p[0], .03, pk.p[2]), M4.scale(1,1,1)), [0,0,0], 0, .25, 0, true);
+  }
+
+  // partÃ­culas e rastros (aditivo)
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE);
+  for (const p of parts){
+    const a = clamp(p.life / p.max, 0, 1);
+    const s = p.s * (0.4 + a);
+    draw(MESH.box, M4.mul(M4.trans(p.p[0],p.p[1],p.p[2]), M4.scale(s,s,s)), p.col, 1, a, 0, true);
+  }
+  for (const b of beams){
+    const d = sub3(b.b, b.a), L = len3(d);
+    if (L < .01) continue;
+    const mid = [ (b.a[0]+b.b[0])/2, (b.a[1]+b.b[1])/2, (b.a[2]+b.b[2])/2 ];
+    const a = b.life / b.max;
+    const m = M4.mul(M4.mul(M4.trans(mid[0],mid[1],mid[2]), M4.alignZ(d)), M4.scale(b.w, b.w, L));
+    draw(MESH.box, m, b.col, 1, a, 0, true);
+  }
+
+  /* --- arma em primeira pessoa --- */
+  gl.disable(gl.BLEND);
+  gl.depthMask(true);
+  gl.clear(gl.DEPTH_BUFFER_BIT);
+  gl.uniformMatrix4fv(U.uProj, false, M4.persp(58*Math.PI/180, aspect, .01, 12));
+  gl.uniformMatrix4fv(U.uView, false, M4.ident());
+  gl.uniform3f(U.uCam, 0, 0, 0);
+  gl.uniform3f(U.uLight, VM_LIGHT[0], VM_LIGHT[1], VM_LIGHT[2]);
+  gl.uniform1f(U.uFogD, 0);
+  resetDrawCache();
+  drawViewModel();
+  gl.uniform1f(U.uFogD, .0145);
+}
+
+function drawViewModel(){
+  const w = WEAPONS[player.wep];
+  const k = player.kick;
+  const sway = [ lerp(0, -player.sway[0], 1), lerp(0, -player.sway[1], 1) ];
+  const bx = Math.cos(player.bob) * .012;
+  const by = Math.abs(Math.sin(player.bob)) * .014;
+  const base = M4.mul(
+    M4.mul(M4.trans(.30 + sway[0] + bx, -.30 + by - k*.012, -.62 + k*.035),
+           M4.rotY(-.09 + sway[0]*.6)),
+    M4.rotX(-.03 + k*.03 + sway[1]*.5)
+  );
+  const part = (x,y,z, sx,sy,sz, col, em) =>
+    draw(MESH.box, M4.mul(M4.mul(base, M4.trans(x,y,z)), M4.scale(sx,sy,sz)), col, em||0, 1, 0, false);
+
+  if (player.wep === 0){
+    part(0, 0, 0,        .085,.115,.46,  [.13,.15,.21]);      // corpo
+    part(0, .035, -.33,  .05,.05,.30,    [.09,.10,.15]);      // cano
+    part(0, .085, .02,   .05,.045,.30,   [.18,.21,.29]);      // trilho
+    part(0, .095, -.14,  .022,.03,.03,   w.col, 1);           // mira
+    part(-.005,-.13,.10, .07,.16,.10,    [.11,.13,.18]);      // punho
+    part(0,-.10,-.06,    .06,.15,.12,    [.16,.19,.26]);      // carregador
+  } else {
+    part(0, 0, .02,      .10,.13,.5,     [.19,.14,.10]);
+    part(-.03,.03,-.36,  .055,.055,.34,  [.10,.11,.15]);
+    part(.03,.03,-.36,   .055,.055,.34,  [.10,.11,.15]);
+    part(0, .095, -.05,  .03,.03,.24,    w.col, 1);
+    part(-.005,-.14,.14, .075,.17,.11,   [.14,.10,.07]);
+    part(0,-.08,-.10,    .055,.05,.22,   [.22,.16,.10]);
+  }
+
+  // clarÃ£o do disparo
+  if (player.fireT > w.rate - .045 && w.ammo >= 0 && player.reloadT === 0){
+    const s = rand(.10, .2);
+    const z = player.wep === 0 ? -.52 : -.55;
+    draw(MESH.box, M4.mul(M4.mul(M4.mul(base, M4.trans(0, .035, z)), M4.rotZ(rand(0,TAU))),
+                          M4.scale(s, s, s*1.5)), [1,.85,.45], 1, 1, 0, true);
+  }
+}
+
+
+/* ==== src/main.js ==== */
+/* =======================================================================
+   11 Â· PONTO DE ENTRADA â€” sobe o WebGL e roda o laÃ§o principal
+   ======================================================================= */
+
+if (!initGL()){
+  $("#panelBody").style.display = "none";
+  $("#err").style.display = "block";
+  $("#err").innerHTML = "<b>Seu navegador nÃ£o tem WebGL2.</b><br>Abra no Chrome, Edge ou Firefox atualizado.";
+} else {
+  bindStart();
+  requestAnimationFrame(frame);
+}
+let last = performance.now(), fpsAcc = 0, fpsN = 0;
+function frame(now){
+  requestAnimationFrame(frame);
+  let dt = (now - last) / 1000;
+  last = now;
+  if (dt > .05) dt = .05;
+
+  resize();
+
+  if (G.state === "play"){
+    G.time += dt;
+    // suavizaÃ§Ã£o do "sway" da arma conforme o giro da mira
+    player.sway[0] = lerp(player.sway[0], clamp((player.yaw - (player._pyaw || player.yaw)) * 7, -.06, .06), .25);
+    player.sway[1] = lerp(player.sway[1], clamp((player.pitch - (player._ppitch || player.pitch)) * 7, -.06, .06), .25);
+    player._pyaw = player.yaw; player._ppitch = player.pitch;
+
+    updatePlayer(dt);
+    updateEnemies(dt);
+    updateBolts(dt);
+    updateWaves(dt);
+    updateFx(dt);
+    updateHud(dt);
+  } else {
+    updateFx(dt * .3);
+  }
+
+  render();
+
+  fpsAcc += dt; fpsN++;
+  if (fpsAcc > .5){
+    elFps.textContent = Math.round(fpsN / fpsAcc) + " FPS Â· " + enemies.length + " HOSTIS";
+    fpsAcc = 0; fpsN = 0;
+  }
+}
+
+})();
+</script>
+</body>
+</html>

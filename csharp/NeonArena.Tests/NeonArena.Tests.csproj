@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>disable</Nullable>
+    <IsPackable>false</IsPackable>
+    <!-- Unity 6 compila C# 9. Fixar aqui garante que os testes recusem qualquer
+         recurso de linguagem que o Unity não aceitaria. -->
+    <LangVersion>9.0</LangVersion>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <RootNamespace>NeonArena.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Fonte única: exatamente os arquivos que o Unity compila em Assets/Scripts/Core. -->
+    <Compile Include="..\..\unity\Assets\Scripts\Core\**\*.cs" />
+    <Compile Include="*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.4" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+  </ItemGroup>
+
+<!-- Sem <Using Include="Xunit"/>: usings globais são C# 10 e aqui a linguagem
+       está travada em 9 para bater com o Unity. Cada arquivo importa o que usa. -->
+
+</Project>
