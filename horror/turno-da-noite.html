@@ -1,0 +1,1694 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Turno da Noite</title>
+<style>
+:root{
+  --preto:#04050a;
+  --sujo:#0d0f14;
+  --osso:#c9c4b8;
+  --dim:#5c5f66;
+  --ambar:#d89a3e;
+  --sangue:#7e1420;
+  --disp:ui-monospace,"Cascadia Mono",Consolas,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden;background:#000;color:var(--osso);
+  font-family:var(--disp);-webkit-font-smoothing:antialiased}
+canvas{display:block;width:100%;height:100%;background:#000}
+body.jogando canvas{cursor:none}
+
+/* ---------------- HUD ---------------- */
+#hud{position:fixed;inset:0;pointer-events:none;opacity:0;transition:opacity .6s}
+body.jogando #hud{opacity:1}
+
+#objetivo{position:absolute;left:0;right:0;top:9%;text-align:center;font-size:13px;
+  letter-spacing:.24em;color:var(--dim);text-transform:uppercase;opacity:0;transition:opacity .8s}
+#objetivo.on{opacity:1}
+
+#bateria{position:absolute;left:26px;bottom:calc(26px + env(safe-area-inset-bottom,0px));
+  width:150px}
+#bateria .rot{font-size:10px;letter-spacing:.2em;color:var(--dim);margin-bottom:5px}
+#bateria .casco{height:9px;border:1px solid rgba(216,154,62,.35);position:relative}
+#bateria i{display:block;height:100%;background:var(--ambar);width:100%;
+  box-shadow:0 0 10px rgba(216,154,62,.5);transition:width .2s linear}
+#bateria.fraca i{background:var(--sangue);box-shadow:0 0 10px rgba(126,20,32,.6);
+  animation:piscar .9s steps(2) infinite}
+@keyframes piscar{50%{opacity:.25}}
+
+#folego{position:absolute;left:26px;bottom:calc(64px + env(safe-area-inset-bottom,0px));
+  width:150px;height:4px;background:rgba(201,196,184,.12)}
+#folego i{display:block;height:100%;background:var(--osso);opacity:.65;transition:width .12s linear}
+
+#fusiveis{position:absolute;right:26px;bottom:calc(26px + env(safe-area-inset-bottom,0px));
+  text-align:right}
+#fusiveis .n{font-size:30px;line-height:1;letter-spacing:.06em}
+#fusiveis .r{font-size:10px;letter-spacing:.2em;color:var(--dim);margin-top:4px}
+
+#dica{position:absolute;left:0;right:0;bottom:22%;text-align:center;font-size:13px;
+  letter-spacing:.12em;color:var(--osso);opacity:0;transition:opacity .25s;text-shadow:0 0 12px #000}
+#dica.on{opacity:.92}
+
+#mira{position:absolute;left:50%;top:50%;width:5px;height:5px;margin:-2.5px 0 0 -2.5px;
+  border:1px solid rgba(201,196,184,.45);border-radius:50%;transition:opacity .3s}
+
+#sussurro{position:absolute;left:0;right:0;top:44%;text-align:center;font-size:15px;
+  letter-spacing:.3em;color:var(--sangue);opacity:0;transition:opacity 1.2s;text-transform:uppercase}
+#sussurro.on{opacity:.8}
+
+#escondido{position:absolute;inset:0;background:#000;opacity:0;transition:opacity .35s;
+  pointer-events:none}
+#escondido.on{opacity:.82}
+
+/* abertura: o jogo nasce do preto. CSS e nao shader, porque nao depende
+   do laco de quadros estar rodando liso */
+#fade{position:fixed;inset:0;background:#000;pointer-events:none;opacity:1;
+  transition:opacity 2.6s ease-out;z-index:5}
+#fade.claro{opacity:0}
+
+/* ---------------- telas ---------------- */
+#tela{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:26px;
+  background:radial-gradient(ellipse at 50% 45%,rgba(20,18,16,.6),rgba(2,3,6,.97) 72%)}
+body.jogando #tela{display:none}
+
+.painel{width:min(600px,100%);text-align:center}
+h1{font-size:clamp(34px,8vw,60px);font-weight:400;letter-spacing:.22em;line-height:1.1;
+  margin-bottom:10px;text-shadow:0 0 40px rgba(0,0,0,.9)}
+h1 b{font-weight:400;color:var(--sangue)}
+.sub{font-size:11px;letter-spacing:.42em;color:var(--dim);text-transform:uppercase;margin-bottom:30px}
+.hist{font-size:13px;line-height:2;color:#9a958c;max-width:46ch;margin:0 auto 30px}
+.teclas{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:7px 20px;
+  margin:0 auto 32px;max-width:460px;text-align:left}
+.teclas div{font-size:12px;color:#8a857c}
+kbd{font-family:var(--disp);font-size:10px;letter-spacing:.06em;border:1px solid rgba(201,196,184,.25);
+  padding:2px 6px;margin-right:7px;color:var(--osso)}
+button{pointer-events:auto;font-family:var(--disp);font-size:12px;letter-spacing:.3em;
+  text-transform:uppercase;color:var(--osso);background:transparent;
+  border:1px solid rgba(201,196,184,.3);padding:15px 38px;cursor:pointer;transition:all .3s}
+button:hover{background:rgba(201,196,184,.07);border-color:var(--osso);letter-spacing:.38em}
+button:focus-visible{outline:1px solid var(--ambar);outline-offset:4px}
+.aviso{font-size:11px;color:var(--dim);margin-top:24px;letter-spacing:.1em}
+.aviso b{color:var(--ambar);font-weight:400}
+#erro{display:none;color:var(--sangue);font-size:13px;line-height:1.8}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<div id="hud">
+  <div id="objetivo"></div>
+  <div id="mira"></div>
+  <div id="folego"><i></i></div>
+  <div id="bateria"><div class="rot">Bateria</div><div class="casco"><i></i></div></div>
+  <div id="fusiveis"><div class="n">0<span style="color:var(--dim)">/5</span></div><div class="r">Fusíveis</div></div>
+  <div id="dica"></div>
+  <div id="sussurro"></div>
+  <div id="escondido"></div>
+  <div id="fade"></div>
+</div>
+
+<div id="tela">
+  <div class="painel">
+    <div id="erro"></div>
+    <div id="corpo">
+      <h1>TURNO DA <b>NOITE</b></h1>
+      <div class="sub">Subestação 7 · desativada em 1998</div>
+      <p class="hist">
+        A energia caiu às 2h14. Para destravar o portão você precisa levar
+        <b style="color:var(--ambar);font-weight:400">cinco fusíveis</b> até o quadro elétrico
+        do subsolo.<br><br>
+        Você não tem arma. Não vai adiantar procurar uma.<br>
+        <b style="color:var(--sangue);font-weight:400">Ele enxerga a sua luz e escuta os seus passos.</b>
+      </p>
+      <div class="teclas">
+        <div><kbd>W A S D</kbd>andar</div>
+        <div><kbd>Shift</kbd>correr — faz barulho</div>
+        <div><kbd>F</kbd>lanterna</div>
+        <div><kbd>E</kbd>pegar / usar</div>
+        <div><kbd>Ctrl</kbd>agachar — silencioso</div>
+        <div><kbd>Espaço</kbd>prender a respiração</div>
+        <div><kbd>Esc</kbd>pausar</div>
+        <div><kbd>M</kbd>mudo</div>
+      </div>
+      <button id="comecar">Descer</button>
+      <div class="aviso">Use <b>fone de ouvido</b>. A direção do som é a sua única defesa.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+(function(){
+
+/* ============================================================
+   0 · BASE
+   ============================================================ */
+const $ = s => document.querySelector(s);
+const TAU = Math.PI * 2;
+const clamp = (v,a,b) => v < a ? a : v > b ? b : v;
+const lerp = (a,b,t) => a + (b-a) * t;
+const rand = (a,b) => a + Math.random() * (b-a);
+const randi = (a,b) => Math.floor(rand(a, b+1));
+const pick = a => a[Math.floor(Math.random()*a.length)];
+const len2 = (x,z) => Math.hypot(x,z);
+
+const M4 = {
+  ident(){ const o = new Float32Array(16); o[0]=o[5]=o[10]=o[15]=1; return o; },
+  mul(a,b){
+    const o = new Float32Array(16);
+    for (let c=0;c<4;c++) for (let r=0;r<4;r++){
+      let s=0; for (let k=0;k<4;k++) s += a[k*4+r]*b[c*4+k];
+      o[c*4+r]=s;
+    }
+    return o;
+  },
+  persp(fovy,asp,n,f){
+    const t = 1/Math.tan(fovy/2), o = new Float32Array(16);
+    o[0]=t/asp; o[5]=t; o[10]=(f+n)/(n-f); o[11]=-1; o[14]=2*f*n/(n-f);
+    return o;
+  },
+  trans(x,y,z){ const o=M4.ident(); o[12]=x;o[13]=y;o[14]=z; return o; },
+  scale(x,y,z){ const o=M4.ident(); o[0]=x;o[5]=y;o[10]=z; return o; },
+  rotX(a){ const c=Math.cos(a),s=Math.sin(a),o=M4.ident(); o[5]=c;o[6]=s;o[9]=-s;o[10]=c; return o; },
+  rotY(a){ const c=Math.cos(a),s=Math.sin(a),o=M4.ident(); o[0]=c;o[2]=-s;o[8]=s;o[10]=c; return o; },
+  rotZ(a){ const c=Math.cos(a),s=Math.sin(a),o=M4.ident(); o[0]=c;o[1]=s;o[4]=-s;o[5]=c; return o; }
+};
+const IDENT3 = new Float32Array([1,0,0, 0,1,0, 0,0,1]);
+function normalMat3(m){
+  const a00=m[0],a01=m[1],a02=m[2],a10=m[4],a11=m[5],a12=m[6],a20=m[8],a21=m[9],a22=m[10];
+  const b01=a22*a11-a12*a21, b11=-a22*a10+a12*a20, b21=a21*a10-a11*a20;
+  let det=a00*b01+a01*b11+a02*b21;
+  if (!det) return IDENT3;
+  det = 1/det;
+  const o = new Float32Array(9);
+  o[0]=b01*det; o[1]=(-a22*a01+a02*a21)*det; o[2]=(a12*a01-a02*a11)*det;
+  o[3]=b11*det; o[4]=(a22*a00-a02*a20)*det;  o[5]=(-a12*a00+a02*a10)*det;
+  o[6]=b21*det; o[7]=(-a21*a00+a01*a20)*det; o[8]=(a11*a00-a01*a10)*det;
+  return o;
+}
+
+/* ============================================================
+   1 · WEBGL
+   ============================================================ */
+const canvas = $("#gl");
+const gl = canvas.getContext("webgl2", { antialias:false, powerPreference:"high-performance" });
+if (!gl){
+  $("#corpo").style.display = "none";
+  $("#erro").style.display = "block";
+  $("#erro").innerHTML = "<b>Sem WebGL2 neste navegador.</b><br>Abra no Chrome, Edge ou Firefox atualizado.";
+  return;
+}
+
+/* --- shader do mundo: a lanterna é o jogo inteiro --- */
+const VS_MUNDO = `#version 300 es
+layout(location=0) in vec3 aPos;
+layout(location=1) in vec3 aNor;
+uniform mat4 uProj, uView, uModel;
+uniform mat3 uNorMat;
+out vec3 vN; out vec3 vW;
+void main(){
+  vec4 w = uModel * vec4(aPos, 1.0);
+  vW = w.xyz;
+  vN = uNorMat * aNor;
+  gl_Position = uProj * uView * w;
+}`;
+
+const FS_MUNDO = `#version 300 es
+precision highp float;
+in vec3 vN; in vec3 vW;
+
+uniform vec3  uCor;          // cor base do material
+uniform vec3  uCam;          // posição do olho
+uniform vec3  uLanternaDir;  // para onde a lanterna aponta
+uniform float uLanternaOn;   // 0 apagada, 1 acesa
+uniform float uEmissivo;     // 1 = brilha sozinho (placas, fusíveis)
+uniform float uAlpha;
+uniform float uPiso;         // 1 = aplica textura procedural de piso
+uniform float uTempo;
+
+out vec4 cor;
+
+// ruído barato para sujar as superfícies — sem ele tudo vira plástico
+float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float ruido(vec2 p){
+  vec2 i = floor(p), f = fract(p);
+  f = f*f*(3.0-2.0*f);
+  return mix(mix(hash(i), hash(i+vec2(1,0)), f.x),
+             mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), f.x), f.y);
+}
+
+void main(){
+  vec3 N = normalize(vN);
+  vec3 base = uCor;
+
+  // sujeira: manchas grandes + granulado fino, nas coordenadas do mundo
+  float sujo = ruido(vW.xz * 0.7) * 0.5 + ruido(vW.xz * 4.0) * 0.2 + ruido(vW.xy * 2.0) * 0.15;
+  base *= 0.72 + sujo * 0.5;
+
+  if (uPiso > 0.5){
+    // rejunte do piso a cada 2 unidades
+    vec2 g = abs(fract(vW.xz * 0.5) - 0.5);
+    float linha = smoothstep(0.46, 0.5, max(g.x, g.y));
+    base = mix(base, base * 0.35, linha);
+  }
+
+  vec3 luz = vec3(0.0);
+
+  // ---- lanterna: cone com borda macia e queda quadrática ----
+  vec3 paraLuz = uCam - vW;
+  float dist = length(paraLuz);
+  vec3 L = paraLuz / max(dist, 0.001);
+
+  float cone = dot(-L, uLanternaDir);
+  float foco = smoothstep(0.82, 0.955, cone);        // borda do facho
+  float halo = smoothstep(0.55, 0.85, cone) * 0.18;  // vazamento ao redor
+  float queda = 1.0 / (1.0 + 0.09 * dist + 0.022 * dist * dist);
+  float difusa = max(dot(N, L), 0.0);
+
+  luz += uLanternaOn * (foco + halo) * queda * difusa * vec3(1.0, 0.93, 0.78) * 2.6;
+
+  // ---- lampião fraco em volta do jogador: evita cegueira total ----
+  float perto = 1.0 / (1.0 + 0.5 * dist + 0.5 * dist * dist);
+  luz += perto * difusa * vec3(0.22, 0.25, 0.34) * 0.9;
+
+  // ---- ambiente quase nada: é o que faz o escuro ser escuro ----
+  luz += vec3(0.020, 0.024, 0.034);
+
+  vec3 c = base * luz;
+  c = mix(c, base * 1.9, uEmissivo);
+
+  // névoa: engole a distância e esconde onde o nível acaba
+  float nevoa = 1.0 - exp(-pow(dist * 0.055, 2.0));
+  c = mix(c, vec3(0.006, 0.007, 0.012), clamp(nevoa, 0.0, 0.97));
+
+  cor = vec4(c, uAlpha);
+}`;
+
+/* --- shader de pós-processamento: granulado, vinheta, aberração e estática --- */
+const VS_POS = `#version 300 es
+const vec2 verts[3] = vec2[3](vec2(-1.0,-1.0), vec2(3.0,-1.0), vec2(-1.0,3.0));
+out vec2 vUV;
+void main(){
+  vec2 p = verts[gl_VertexID];
+  vUV = p * 0.5 + 0.5;
+  gl_Position = vec4(p, 0.0, 1.0);
+}`;
+
+const FS_POS = `#version 300 es
+precision highp float;
+in vec2 vUV;
+uniform sampler2D uCena;
+uniform float uTempo;
+uniform float uMedo;      // 0..1 — sobe quando ele está perto
+uniform float uPiscada;   // 0..1 — clarão/branco ao ser pego
+out vec4 cor;
+
+float hash(vec2 p){ return fract(sin(dot(p, vec2(127.1,311.7))) * 43758.5453); }
+
+void main(){
+  vec2 uv = vUV;
+
+  // aberração cromática cresce com o medo e com a distância do centro
+  vec2 doCentro = uv - 0.5;
+  float raio = length(doCentro);
+  float ab = (0.0016 + uMedo * 0.010) * raio;
+
+  vec3 c;
+  c.r = texture(uCena, uv + doCentro * ab).r;
+  c.g = texture(uCena, uv).g;
+  c.b = texture(uCena, uv - doCentro * ab).b;
+
+  // granulado de filme: a textura que faz parecer câmera de segurança
+  float gr = hash(uv * vec2(1920.0, 1080.0) + fract(uTempo) * 137.0);
+  c += (gr - 0.5) * (0.075 + uMedo * 0.14);
+
+  // estática forte quando ele está muito perto
+  if (uMedo > 0.45){
+    float faixa = hash(vec2(floor(uv.y * 160.0), floor(uTempo * 22.0)));
+    if (faixa > 0.975) c *= 0.25 + hash(uv + uTempo) * 1.5;
+  }
+
+  // vinheta pesada — a escuridão das bordas é metade do clima
+  float vin = smoothstep(0.85, 0.22, raio);
+  c *= mix(vin, vin * 0.55, uMedo);
+
+  // sangue nos cantos quando o medo estoura
+  c.r += uMedo * uMedo * (1.0 - vin) * 0.45;
+
+  // curva de contraste: pretos mais fechados, luz da lanterna estourando
+  c = max(c - 0.006, 0.0);
+  c = pow(c, vec3(0.92));
+
+  c = mix(c, vec3(1.0), uPiscada);
+  cor = vec4(c, 1.0);
+}`;
+
+function compilar(tipo, src){
+  const s = gl.createShader(tipo);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+function programa(vs, fs){
+  const p = gl.createProgram();
+  gl.attachShader(p, compilar(gl.VERTEX_SHADER, vs));
+  gl.attachShader(p, compilar(gl.FRAGMENT_SHADER, fs));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  return p;
+}
+
+const progMundo = programa(VS_MUNDO, FS_MUNDO);
+const progPos   = programa(VS_POS, FS_POS);
+
+const U = {};
+["uProj","uView","uModel","uNorMat","uCor","uCam","uLanternaDir","uLanternaOn",
+ "uEmissivo","uAlpha","uPiso","uTempo"].forEach(n => U[n] = gl.getUniformLocation(progMundo, n));
+const P = {};
+["uCena","uTempo","uMedo","uPiscada"].forEach(n => P[n] = gl.getUniformLocation(progPos, n));
+
+/* --- malhas --- */
+function malha(pos, nor, idx){
+  const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+  const pb = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, pb);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pos), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0,3,gl.FLOAT,false,0,0);
+  const nb = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, nb);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(nor), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1,3,gl.FLOAT,false,0,0);
+  const ib = gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx), gl.STATIC_DRAW);
+  gl.bindVertexArray(null);
+  return { vao, n: idx.length };
+}
+function caixaGeo(){
+  const p=[],n=[],i=[];
+  const F=[
+    {n:[0,0,1], v:[[-.5,-.5,.5],[.5,-.5,.5],[.5,.5,.5],[-.5,.5,.5]]},
+    {n:[0,0,-1],v:[[.5,-.5,-.5],[-.5,-.5,-.5],[-.5,.5,-.5],[.5,.5,-.5]]},
+    {n:[1,0,0], v:[[.5,-.5,.5],[.5,-.5,-.5],[.5,.5,-.5],[.5,.5,.5]]},
+    {n:[-1,0,0],v:[[-.5,-.5,-.5],[-.5,-.5,.5],[-.5,.5,.5],[-.5,.5,-.5]]},
+    {n:[0,1,0], v:[[-.5,.5,.5],[.5,.5,.5],[.5,.5,-.5],[-.5,.5,-.5]]},
+    {n:[0,-1,0],v:[[-.5,-.5,-.5],[.5,-.5,-.5],[.5,-.5,.5],[-.5,-.5,.5]]}
+  ];
+  F.forEach((f,k)=>{
+    f.v.forEach(v=>{ p.push(v[0],v[1],v[2]); n.push(f.n[0],f.n[1],f.n[2]); });
+    const b=k*4; i.push(b,b+1,b+2, b,b+2,b+3);
+  });
+  return malha(p,n,i);
+}
+function esferaGeo(sg,rg){
+  const p=[],n=[],i=[];
+  for (let y=0;y<=rg;y++){
+    const phi=(y/rg)*Math.PI;
+    for (let x=0;x<=sg;x++){
+      const th=(x/sg)*TAU;
+      const nx=Math.sin(phi)*Math.cos(th), ny=Math.cos(phi), nz=Math.sin(phi)*Math.sin(th);
+      n.push(nx,ny,nz); p.push(nx*.5,ny*.5,nz*.5);
+    }
+  }
+  for (let y=0;y<rg;y++) for (let x=0;x<sg;x++){
+    const a=y*(sg+1)+x, b=a+sg+1;
+    i.push(a,a+1,b, a+1,b+1,b);
+  }
+  return malha(p,n,i);
+}
+function planoGeo(){
+  return malha([-.5,0,.5, .5,0,.5, .5,0,-.5, -.5,0,-.5],
+               [0,1,0, 0,1,0, 0,1,0, 0,1,0],
+               [0,1,2, 0,2,3]);
+}
+function planoInvGeo(){   // teto: mesma coisa com a normal para baixo
+  return malha([-.5,0,-.5, .5,0,-.5, .5,0,.5, -.5,0,.5],
+               [0,-1,0, 0,-1,0, 0,-1,0, 0,-1,0],
+               [0,1,2, 0,2,3]);
+}
+const MESH = {
+  caixa: caixaGeo(),
+  esfera: esferaGeo(14,10),
+  plano: planoGeo(),
+  teto: planoInvGeo()
+};
+
+/* --- alvo de renderização para o pós-processamento --- */
+let fbo = null, texCena = null, rbDepth = null, LW = 0, LH = 0;
+function criarAlvo(w, h){
+  if (fbo){ gl.deleteFramebuffer(fbo); gl.deleteTexture(texCena); gl.deleteRenderbuffer(rbDepth); }
+  texCena = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, texCena);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+  rbDepth = gl.createRenderbuffer();
+  gl.bindRenderbuffer(gl.RENDERBUFFER, rbDepth);
+  gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, w, h);
+
+  fbo = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texCena, 0);
+  gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, rbDepth);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
+
+let W = 0, H = 0;
+function redimensionar(){
+  // resolução um pouco abaixo do nativo: dá granulação e segura o quadro
+  const dpr = Math.min(devicePixelRatio || 1, 1.5);
+  const w = Math.max(1, Math.floor(innerWidth * dpr));
+  const h = Math.max(1, Math.floor(innerHeight * dpr));
+  if (w === W && h === H) return;
+  W = w; H = h;
+  canvas.width = W; canvas.height = H;
+  criarAlvo(W, H);
+}
+addEventListener("resize", redimensionar);
+
+let vaoVazio = null;
+function desenhar(m, model, cor, emissivo, alpha, piso){
+  gl.uniformMatrix4fv(U.uModel, false, model);
+  gl.uniformMatrix3fv(U.uNorMat, false, normalMat3(model));
+  gl.uniform3f(U.uCor, cor[0], cor[1], cor[2]);
+  gl.uniform1f(U.uEmissivo, emissivo || 0);
+  gl.uniform1f(U.uAlpha, alpha === undefined ? 1 : alpha);
+  gl.uniform1f(U.uPiso, piso ? 1 : 0);
+  gl.bindVertexArray(m.vao);
+  gl.drawElements(gl.TRIANGLES, m.n, gl.UNSIGNED_SHORT, 0);
+}
+function desenharCaixa(x,y,z, sx,sy,sz, cor, emissivo){
+  desenhar(MESH.caixa, M4.mul(M4.trans(x,y,z), M4.scale(sx,sy,sz)), cor, emissivo, 1, 0);
+}
+
+/* ============================================================
+   2 · O PRÉDIO
+   Grade de células: 1 parede, 0 chão. Os cômodos são retângulos
+   escavados num bloco maciço e os corredores ligam os centros.
+   Nada é aleatório na planta — só a colocação dos itens.
+   ============================================================ */
+const GW = 44, GH = 36, CELL = 3.0;
+const ALTURA = 3.4;
+const grade = new Uint8Array(GW * GH).fill(1);
+const emGrade = (cx,cz) => cx >= 0 && cz >= 0 && cx < GW && cz < GH;
+const parede = (cx,cz) => !emGrade(cx,cz) || grade[cz*GW+cx] === 1;
+const paraMundo = (cx,cz) => [(cx - GW/2 + .5) * CELL, (cz - GH/2 + .5) * CELL];
+const paraCelula = (x,z) => [Math.floor(x/CELL + GW/2), Math.floor(z/CELL + GH/2)];
+
+const SALAS = [
+  { id:"entrada",   x:2,  z:29, w:9,  h:5, nome:"portaria" },
+  { id:"bombas",    x:16, z:28, w:10, h:6, nome:"casa de bombas" },
+  { id:"deposito",  x:29, z:27, w:12, h:7, nome:"deposito" },
+  { id:"escrit",    x:32, z:17, w:9,  h:7, nome:"escritorio" },
+  { id:"vestiario", x:19, z:17, w:9,  h:7, nome:"vestiario" },
+  { id:"galpao",    x:4,  z:16, w:12, h:8, nome:"galpao" },
+  { id:"quadro",    x:17, z:5,  w:12, h:7, nome:"quadro eletrico" },
+  { id:"tunel",     x:32, z:5,  w:8,  h:6, nome:"tunel norte" },
+  { id:"fria",      x:3,  z:4,  w:10, h:7, nome:"sala fria" }
+];
+const sala = id => SALAS.find(s => s.id === id);
+const centroSala = s => [Math.floor(s.x + s.w/2), Math.floor(s.z + s.h/2)];
+
+function escavarRet(x, z, w, h){
+  for (let cz = z; cz < z+h; cz++)
+    for (let cx = x; cx < x+w; cx++)
+      if (emGrade(cx,cz)) grade[cz*GW+cx] = 0;
+}
+function escavarCorredor(a, b, larg){
+  const ax = a[0], az = a[1], bx = b[0], bz = b[1];
+  const r = Math.floor(larg/2);
+  const linhaH = (x0, x1, z) => {
+    for (let x = Math.min(x0,x1); x <= Math.max(x0,x1); x++)
+      for (let d = -r; d <= r; d++) if (emGrade(x, z+d)) grade[(z+d)*GW+x] = 0;
+  };
+  const linhaV = (z0, z1, x) => {
+    for (let z = Math.min(z0,z1); z <= Math.max(z0,z1); z++)
+      for (let d = -r; d <= r; d++) if (emGrade(x+d, z)) grade[z*GW+(x+d)] = 0;
+  };
+  // corredor em L; o cotovelo alterna para a planta nao ficar toda igual
+  if ((ax + az) % 2 === 0){ linhaH(ax, bx, az); linhaV(az, bz, bx); }
+  else { linhaV(az, bz, ax); linhaH(ax, bx, bz); }
+}
+
+// ligacoes com ciclos de proposito: numa perseguicao voce precisa de rota de fuga
+const LIGACOES = [
+  ["entrada","bombas"], ["bombas","deposito"], ["deposito","escrit"],
+  ["escrit","tunel"], ["tunel","quadro"], ["quadro","fria"],
+  ["fria","galpao"], ["galpao","entrada"], ["vestiario","bombas"],
+  ["vestiario","quadro"], ["galpao","vestiario"], ["deposito","tunel"]
+];
+
+function construirPredio(){
+  grade.fill(1);
+  SALAS.forEach(s => escavarRet(s.x, s.z, s.w, s.h));
+  LIGACOES.forEach(par => escavarCorredor(centroSala(sala(par[0])), centroSala(sala(par[1])), 3));
+  // moldura solida: ninguem escapa pela borda
+  for (let i=0;i<GW;i++){ grade[i]=1; grade[(GH-1)*GW+i]=1; }
+  for (let j=0;j<GH;j++){ grade[j*GW]=1; grade[j*GW+GW-1]=1; }
+}
+
+/* Busca em largura. Serve para o caminho da criatura e, principalmente, para
+   provar que o predio e conectado: um item inalcancavel trava o jogo calado. */
+function bfs(origem, destino){
+  const sx = origem[0], sz = origem[1], tx = destino[0], tz = destino[1];
+  if (parede(sx,sz) || parede(tx,tz)) return null;
+  const veio = new Int32Array(GW*GH).fill(-1);
+  const inicio = sz*GW+sx, alvo = tz*GW+tx;
+  const fila = [inicio];
+  veio[inicio] = inicio;
+  for (let i = 0; i < fila.length; i++){
+    const at = fila[i];
+    if (at === alvo){
+      const caminho = [];
+      let n = at;
+      while (n !== veio[n]){ caminho.push([n%GW, Math.floor(n/GW)]); n = veio[n]; }
+      caminho.push([sx,sz]);
+      return caminho.reverse();
+    }
+    const cx = at % GW, cz = Math.floor(at / GW);
+    const viz = [[cx+1,cz],[cx-1,cz],[cx,cz+1],[cx,cz-1]];
+    for (let v = 0; v < 4; v++){
+      const nx = viz[v][0], nz = viz[v][1];
+      if (parede(nx,nz)) continue;
+      const k = nz*GW+nx;
+      if (veio[k] !== -1) continue;
+      veio[k] = at;
+      fila.push(k);
+    }
+  }
+  return null;
+}
+const alcancavel = (a,b) => bfs(a,b) !== null;
+
+/* Paredes viram caixas: junta corridas horizontais para nao mandar mil cubos
+   para a placa de video a cada quadro. */
+let blocos = [];
+function montarBlocos(){
+  blocos = [];
+  const usado = new Uint8Array(GW*GH);
+  for (let cz = 0; cz < GH; cz++){
+    for (let cx = 0; cx < GW; cx++){
+      if (grade[cz*GW+cx] !== 1 || usado[cz*GW+cx]) continue;
+      let fim = cx;
+      while (fim+1 < GW && grade[cz*GW+fim+1] === 1 && !usado[cz*GW+fim+1]) fim++;
+      for (let k = cx; k <= fim; k++) usado[cz*GW+k] = 1;
+      const largura = (fim - cx + 1) * CELL;
+      const wm = paraMundo(cx, cz);
+      blocos.push({ x: wm[0] + (largura - CELL)/2, z: wm[1], sx: largura, sz: CELL });
+    }
+  }
+}
+
+/* Colisao: olha so as 9 celulas em volta, nunca a lista inteira. */
+function empurrarFora(p, raio){
+  const c = paraCelula(p[0], p[2]);
+  for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++){
+    const nx = c[0]+dx, nz = c[1]+dz;
+    if (!parede(nx,nz)) continue;
+    const wm = paraMundo(nx, nz);
+    const minx = wm[0] - CELL/2, maxx = wm[0] + CELL/2;
+    const minz = wm[1] - CELL/2, maxz = wm[1] + CELL/2;
+    const px = clamp(p[0], minx, maxx), pz = clamp(p[2], minz, maxz);
+    const ddx = p[0]-px, ddz = p[2]-pz;
+    const d2 = ddx*ddx + ddz*ddz;
+    if (d2 >= raio*raio) continue;
+    const d = Math.sqrt(d2);
+    if (d < 1e-5){
+      const ex = Math.min(p[0]-minx, maxx-p[0]), ez = Math.min(p[2]-minz, maxz-p[2]);
+      if (ex < ez) p[0] += p[0] < wm[0] ? -(ex+raio) : (ex+raio);
+      else         p[2] += p[2] < wm[1] ? -(ez+raio) : (ez+raio);
+    } else {
+      const f = (raio-d)/d;
+      p[0] += ddx*f; p[2] += ddz*f;
+    }
+  }
+}
+
+/* Linha de visao andando pela grade, celula a celula. */
+function visivel(ax, az, bx, bz){
+  const dx = bx-ax, dz = bz-az;
+  const dist = Math.hypot(dx, dz);
+  if (dist < .001) return true;
+  const passos = Math.ceil(dist / (CELL*0.4));
+  for (let i = 1; i < passos; i++){
+    const t = i/passos;
+    const c = paraCelula(ax + dx*t, az + dz*t);
+    if (parede(c[0], c[1])) return false;
+  }
+  return true;
+}
+
+/* ============================================================
+   3 · ÁUDIO — posicional, porque ouvir de que lado ele vem
+   é a única defesa que o jogo oferece
+   ============================================================ */
+let AC = null, mestre = null, mudo = false, bufRuido = null;
+let droneOsc = null, droneGain = null, droneFiltro = null;
+
+function audioIniciar(){
+  if (AC){ if (AC.state === "suspended") AC.resume(); return; }
+  const Ctx = window.AudioContext || window.webkitAudioContext;
+  if (!Ctx) return;
+  AC = new Ctx();
+  mestre = AC.createGain();
+  mestre.gain.value = .85;
+  mestre.connect(AC.destination);
+
+  const n = Math.floor(AC.sampleRate * 2);
+  bufRuido = AC.createBuffer(1, n, AC.sampleRate);
+  const d = bufRuido.getChannelData(0);
+  for (let i=0;i<n;i++) d[i] = Math.random()*2 - 1;
+
+  // zumbido de fundo constante: silencio absoluto soa quebrado, nao assustador
+  droneOsc = AC.createOscillator();
+  droneOsc.type = "sawtooth";
+  droneOsc.frequency.value = 38;
+  droneFiltro = AC.createBiquadFilter();
+  droneFiltro.type = "lowpass";
+  droneFiltro.frequency.value = 120;
+  droneGain = AC.createGain();
+  droneGain.gain.value = .05;
+  droneOsc.connect(droneFiltro); droneFiltro.connect(droneGain); droneGain.connect(mestre);
+  droneOsc.start();
+}
+function ouvinteEm(pos, dirX, dirZ){
+  if (!AC) return;
+  const L = AC.listener;
+  if (L.positionX){
+    L.positionX.value = pos[0]; L.positionY.value = pos[1]; L.positionZ.value = pos[2];
+    L.forwardX.value = dirX; L.forwardY.value = 0; L.forwardZ.value = dirZ;
+    L.upX.value = 0; L.upY.value = 1; L.upZ.value = 0;
+  } else if (L.setPosition){
+    L.setPosition(pos[0], pos[1], pos[2]);
+    L.setOrientation(dirX, 0, dirZ, 0, 1, 0);
+  }
+}
+function saida(pos){
+  // sem posicao o som toca na sua cabeca; com posicao, vem de um lado so
+  if (!pos) return mestre;
+  const pan = AC.createPanner();
+  pan.panningModel = "HRTF";
+  pan.distanceModel = "inverse";
+  pan.refDistance = 3;
+  pan.maxDistance = 90;
+  pan.rolloffFactor = 1.4;
+  if (pan.positionX){
+    pan.positionX.value = pos[0]; pan.positionY.value = pos[1]; pan.positionZ.value = pos[2];
+  } else pan.setPosition(pos[0], pos[1], pos[2]);
+  pan.connect(mestre);
+  return pan;
+}
+function tom(f0, f1, dur, tipo, vol, atraso, pos){
+  if (!AC || mudo) return;
+  const t = AC.currentTime + (atraso||0);
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = tipo || "sine";
+  o.frequency.setValueAtTime(f0, t);
+  o.frequency.exponentialRampToValueAtTime(Math.max(f1,1), t+dur);
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(vol, t+.01);
+  g.gain.exponentialRampToValueAtTime(.0001, t+dur);
+  o.connect(g); g.connect(saida(pos));
+  o.start(t); o.stop(t+dur+.05);
+}
+function ruido(dur, vol, f0, f1, q, atraso, pos, tipo){
+  if (!AC || mudo || !bufRuido) return;
+  const t = AC.currentTime + (atraso||0);
+  const s = AC.createBufferSource();
+  s.buffer = bufRuido;
+  s.playbackRate.value = rand(.85, 1.15);
+  const f = AC.createBiquadFilter();
+  f.type = tipo || "bandpass";
+  f.Q.value = q || 1;
+  f.frequency.setValueAtTime(f0, t);
+  f.frequency.exponentialRampToValueAtTime(Math.max(f1,20), t+dur);
+  const g = AC.createGain();
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(vol, t+.008);
+  g.gain.exponentialRampToValueAtTime(.0001, t+dur);
+  s.connect(f); f.connect(g); g.connect(saida(pos));
+  s.start(t); s.stop(t+dur+.05);
+}
+const SOM = {
+  passo(pos, forte){ ruido(forte?.15:.09, forte?.09:.045, 320, 110, .8, 0, pos, "lowpass"); },
+  passoDele(pos){ ruido(.2, .34, 260, 80, .7, 0, pos, "lowpass"); tom(62, 40, .22, "sine", .16, 0, pos); },
+  arranhao(pos){ ruido(.5, .16, 1800, 400, 3, 0, pos); },
+  respirar(forte){ ruido(forte?.55:.4, forte?.085:.04, 620, 240, 1.2, 0, null, "bandpass"); },
+  batida(v){ tom(56, 30, .16, "sine", v); tom(44, 26, .2, "sine", v*.7, .17); },
+  fusivel(){ tom(880, 1320, .1, "triangle", .2); tom(1320, 1760, .14, "triangle", .14, .09); },
+  bateria(){ tom(520, 760, .09, "square", .13); },
+  encaixe(){ ruido(.14, .3, 900, 220, 2); tom(120, 60, .22, "square", .18, .05); },
+  energia(){ tom(60, 220, 1.4, "sawtooth", .12); ruido(1.2, .1, 300, 2400, .6); },
+  armario(){ ruido(.42, .22, 900, 260, 4); tom(180, 90, .3, "triangle", .1, .05); },
+  gota(pos){ tom(1400, 700, .08, "sine", .06, 0, pos); },
+  metal(pos){ ruido(.6, .1, 2200, 500, 6, 0, pos); },
+  pego(){ tom(900, 40, 1.6, "sawtooth", .5); ruido(1.4, .4, 2400, 100, .5); },
+  gritoDele(pos){ tom(420, 90, .9, "sawtooth", .3, 0, pos); ruido(.8, .24, 1400, 200, 1.2, 0, pos); },
+  vitoria(){ tom(220,330,1.2,"sine",.16); tom(330,440,1.4,"sine",.13,.2); }
+};
+function ajustarDrone(medo, caca){
+  if (!droneGain || !droneFiltro || !AC) return;
+  const t = AC.currentTime;
+  droneGain.gain.setTargetAtTime(mudo ? 0 : (.045 + medo*.16 + (caca?.1:0)), t, .4);
+  droneFiltro.frequency.setTargetAtTime(110 + medo*520 + (caca?420:0), t, .5);
+  droneOsc.frequency.setTargetAtTime(38 + medo*16, t, .8);
+}
+
+/* ============================================================
+   4 · JOGADOR, ITENS E A COISA
+   ============================================================ */
+const jogador = {
+  p:[0,0,0], yaw:0, pitch:0,
+  agachado:false, correndo:false,
+  folego:1, bateria:1, lanterna:true,
+  escondido:null, prendendo:false, ar:1,
+  fusiveis:0, instalados:0,
+  bob:0, passoT:0, medo:0, batidaT:0, respiraT:0,
+  vivo:true, venceu:false
+};
+const OLHO_EM_PE = 1.66, OLHO_AGACHADO = 1.02;
+
+const ELE = {
+  p:[0,0,0], estado:"patrulha", velAtual:[0,0],
+  caminho:[], passo:0, recalcular:0, ultimoVisto:null,
+  passoT:0, agressao:0, paciencia:0, grunhidoT:0, semPista:0
+};
+const VEL = { patrulha:2.35, investiga:3.3, caca:5.15, procura:2.9 };
+
+let fusiveis = [], baterias = [], armarios = [], quadro = null, portao = null;
+let ambienteT = 0;
+
+function pontoLivreNaSala(s, margem){
+  const m = margem === undefined ? 1 : margem;
+  for (let tent = 0; tent < 60; tent++){
+    const cx = randi(s.x + m, s.x + s.w - 1 - m);
+    const cz = randi(s.z + m, s.z + s.h - 1 - m);
+    if (!parede(cx,cz)) return [cx,cz];
+  }
+  return centroSala(s);
+}
+
+function povoar(){
+  fusiveis = []; baterias = []; armarios = [];
+
+  // Nasce no fundo da portaria, de costas para o portao e de frente para o predio.
+  // Nascer colado no portao dava uma primeira imagem de parede vermelha na cara.
+  const se = sala("entrada");
+  const cse = centroSala(se);
+  const wm = paraMundo(cse[0], cse[1]);
+  jogador.p = [wm[0], 0, wm[1]];
+
+  // portao: a saida, na portaria
+  const pg = paraMundo(sala("entrada").x + 1, sala("entrada").z + 2);
+  portao = { p:[pg[0], 0, pg[1]], aberto:false };
+
+  // quadro eletrico
+  const qc = centroSala(sala("quadro"));
+  const qm = paraMundo(qc[0], qc[1]);
+  quadro = { p:[qm[0], 0, qm[1]] };
+
+  // cinco fusiveis, um por sala, nunca na portaria nem no quadro
+  const candidatas = SALAS.filter(s => s.id !== "entrada" && s.id !== "quadro");
+  const escolhidas = candidatas.slice().sort(() => Math.random() - .5).slice(0, 5);
+  escolhidas.forEach(s => {
+    const c = pontoLivreNaSala(s);
+    const m = paraMundo(c[0], c[1]);
+    fusiveis.push({ p:[m[0], .55, m[1]], pego:false, sala:s.nome });
+  });
+
+  // baterias espalhadas
+  const paraBateria = SALAS.slice().sort(() => Math.random() - .5).slice(0, 4);
+  paraBateria.forEach(s => {
+    const c = pontoLivreNaSala(s);
+    const m = paraMundo(c[0], c[1]);
+    baterias.push({ p:[m[0], .4, m[1]], pego:false });
+  });
+
+  // armarios: dois por sala, fora da portaria
+  SALAS.forEach(s => {
+    if (s.id === "entrada") return;
+    for (let k = 0; k < 2; k++){
+      const c = pontoLivreNaSala(s, 0);
+      const m = paraMundo(c[0], c[1]);
+      armarios.push({ p:[m[0], 0, m[1]] });
+    }
+  });
+
+  // ele comeca longe, no outro canto do predio
+  const ec = centroSala(sala("fria"));
+  const em = paraMundo(ec[0], ec[1]);
+  ELE.p = [em[0], 0, em[1]];
+  ELE.estado = "patrulha";
+  ELE.caminho = []; ELE.passo = 0; ELE.recalcular = 0;
+  ELE.ultimoVisto = null; ELE.agressao = 0;
+  ELE.velAtual = [0,0];
+}
+
+/* prova que da para terminar: todo item e o quadro tem de ser alcancaveis
+   a pe a partir de onde voce nasce */
+function validarNivel(){
+  const inicio = paraCelula(jogador.p[0], jogador.p[2]);
+  const falhas = [];
+  fusiveis.forEach((f,i) => {
+    if (!alcancavel(inicio, paraCelula(f.p[0], f.p[2]))) falhas.push("fusivel " + (i+1));
+  });
+  if (!alcancavel(inicio, paraCelula(quadro.p[0], quadro.p[2]))) falhas.push("quadro");
+  if (!alcancavel(inicio, paraCelula(ELE.p[0], ELE.p[2]))) falhas.push("criatura");
+  return falhas;
+}
+
+function gerarNivel(){
+  for (let tentativa = 0; tentativa < 12; tentativa++){
+    construirPredio();
+    montarBlocos();
+    povoar();
+    const falhas = validarNivel();
+    if (falhas.length === 0) return true;
+    console.warn("planta descartada, inalcancavel:", falhas.join(", "));
+  }
+  return false;
+}
+
+/* ---------- ruido que o jogador faz ---------- */
+function fazerBarulho(raio){
+  const d = len2(ELE.p[0]-jogador.p[0], ELE.p[2]-jogador.p[2]);
+  if (d > raio) return;
+  if (ELE.estado === "caca") return;
+  ELE.ultimoVisto = [jogador.p[0], jogador.p[2]];
+  if (ELE.estado !== "investiga"){
+    ELE.estado = "investiga";
+    ELE.recalcular = 0;
+  }
+  ELE.paciencia = 9;
+}
+
+/* ---------- ele te enxerga? ---------- */
+function alcanceDeVisao(){
+  if (jogador.escondido) return 0;
+  let r = jogador.agachado ? 5.5 : 10;
+  if (jogador.lanterna && jogador.bateria > 0) r = 34;   // a luz te entrega de longe
+  if (jogador.correndo) r += 5;
+  return r;
+}
+function direcaoDele(){
+  const v = ELE.velAtual;
+  const m = len2(v[0], v[1]);
+  if (m < .05) return [0, 1];
+  return [v[0]/m, v[1]/m];
+}
+function eleTeVe(){
+  const alc = alcanceDeVisao();
+  if (alc <= 0) return false;
+  const dx = jogador.p[0]-ELE.p[0], dz = jogador.p[2]-ELE.p[2];
+  const d = len2(dx,dz);
+  if (d > alc) return false;
+  // A lanterna acesa e um farol: ela nota a luz mesmo fora do campo de visao.
+  // Sem luz, so te ve se estiver olhando na sua direcao.
+  const luzAcesa = jogador.lanterna && jogador.bateria > 0;
+  if (d > 2.0 && !luzAcesa){
+    const fr = direcaoDele();
+    if ((dx/d)*fr[0] + (dz/d)*fr[1] < 0.25) return false;
+  }
+  return visivel(ELE.p[0], ELE.p[2], jogador.p[0], jogador.p[2]);
+}
+
+/* ---------- ia ---------- */
+function novoDestinoPatrulha(){
+  return pontoLivreNaSala(pick(SALAS));
+}
+function recalcularCaminho(destino){
+  const origem = paraCelula(ELE.p[0], ELE.p[2]);
+  const c = bfs(origem, destino);
+  ELE.caminho = c || [];
+  ELE.passo = 0;
+}
+
+function atualizarELE(dt){
+  if (!jogador.vivo || jogador.venceu) return;
+
+  const dxJ = jogador.p[0]-ELE.p[0], dzJ = jogador.p[2]-ELE.p[2];
+  const distJ = len2(dxJ, dzJ);
+  const enxerga = eleTeVe();
+
+  if (enxerga){
+    if (ELE.estado !== "caca"){
+      SOM.gritoDele(ELE.p);
+      ELE.estado = "caca";
+      ELE.recalcular = 0;
+    }
+    ELE.ultimoVisto = [jogador.p[0], jogador.p[2]];
+    ELE.paciencia = 6;
+  } else if (ELE.estado === "caca"){
+    ELE.paciencia -= dt;
+    if (ELE.paciencia <= 0){
+      ELE.estado = "procura";
+      ELE.paciencia = 11;
+      ELE.recalcular = 0;
+    }
+  } else if (ELE.estado === "investiga" || ELE.estado === "procura"){
+    ELE.paciencia -= dt;
+    if (ELE.paciencia <= 0){
+      ELE.estado = "patrulha";
+      ELE.recalcular = 0;
+    }
+  }
+
+  // escondido: prender o ar é o que te salva quando ele chega perto
+  if (jogador.escondido && distJ < 3.2 && ELE.estado !== "patrulha"){
+    if (!jogador.prendendo){
+      ELE.ultimoVisto = [jogador.p[0], jogador.p[2]];
+      ELE.paciencia = Math.max(ELE.paciencia, 7);
+    }
+  }
+
+  if (ELE.estado === "patrulha") ELE.semPista += dt; else ELE.semPista = 0;
+
+  ELE.recalcular -= dt;
+  const semCaminho = ELE.caminho.length === 0 || ELE.passo >= ELE.caminho.length;
+  // Na patrulha ela precisa CHEGAR onde decidiu ir. Recalcular a cada segundo
+  // fazia trocar de ideia antes de sair do lugar: ela girava perto de onde nasceu
+  // e nunca cruzava o predio. Cacando e diferente, ali o alvo se move.
+  const recalc = ELE.estado === "caca" ? (ELE.recalcular <= 0) : (semCaminho || ELE.recalcular <= 0);
+  if (recalc){
+    ELE.recalcular = ELE.estado === "caca" ? .45 : 8.0;
+    let destino = null;
+    if (ELE.estado === "caca") destino = paraCelula(jogador.p[0], jogador.p[2]);
+    else if (ELE.ultimoVisto && (ELE.estado === "investiga" || ELE.estado === "procura")){
+      destino = paraCelula(ELE.ultimoVisto[0], ELE.ultimoVisto[1]);
+      if (ELE.estado === "procura"){
+        const vagar = [clamp(destino[0]+randi(-3,3),1,GW-2), clamp(destino[1]+randi(-3,3),1,GH-2)];
+        if (!parede(vagar[0], vagar[1])) destino = vagar;
+      }
+    } else if (ELE.semPista > 25){
+      // faz tempo demais que ela nao tem pista: comeca a vir para o seu lado.
+      // Nao e mira perfeita, e um cerco que aperta — a tensao precisa subir sozinha.
+      const pj = paraCelula(jogador.p[0], jogador.p[2]);
+      const perto = [clamp(pj[0]+randi(-4,4),1,GW-2), clamp(pj[1]+randi(-4,4),1,GH-2)];
+      destino = parede(perto[0],perto[1]) ? pj : perto;
+      ELE.semPista = 8;
+    } else destino = novoDestinoPatrulha();
+    recalcularCaminho(destino);
+  }
+
+  // segue o caminho, celula por celula
+  const vel = VEL[ELE.estado] + ELE.agressao * 0.42;
+  let alvoX = null, alvoZ = null;
+  if (ELE.caminho.length){
+    const no = ELE.caminho[Math.min(ELE.passo, ELE.caminho.length-1)];
+    const m = paraMundo(no[0], no[1]);
+    alvoX = m[0]; alvoZ = m[1];
+    if (len2(alvoX-ELE.p[0], alvoZ-ELE.p[2]) < CELL*.55) ELE.passo++;
+    if (ELE.passo >= ELE.caminho.length){ ELE.caminho = []; ELE.recalcular = 0; }
+  }
+
+  // Perto e com linha de visao ela larga o caminho da grade e vem direto em cima.
+  // Sem isto ela para no ultimo centro de celula, a 1,7 m, e nunca te alcanca.
+  if (ELE.estado === "caca" && distJ < 7 && visivel(ELE.p[0], ELE.p[2], jogador.p[0], jogador.p[2])){
+    alvoX = jogador.p[0]; alvoZ = jogador.p[2];
+  }
+
+  if (alvoX !== null){
+    const dx = alvoX-ELE.p[0], dz = alvoZ-ELE.p[2];
+    const d = len2(dx,dz) || 1;
+    ELE.velAtual[0] = lerp(ELE.velAtual[0], dx/d*vel, Math.min(1, dt*5));
+    ELE.velAtual[1] = lerp(ELE.velAtual[1], dz/d*vel, Math.min(1, dt*5));
+  } else {
+    ELE.velAtual[0] = lerp(ELE.velAtual[0], 0, Math.min(1, dt*4));
+    ELE.velAtual[1] = lerp(ELE.velAtual[1], 0, Math.min(1, dt*4));
+  }
+
+  ELE.p[0] += ELE.velAtual[0]*dt;
+  ELE.p[2] += ELE.velAtual[1]*dt;
+  empurrarFora(ELE.p, .5);
+
+  // passos audiveis: é assim que voce sabe onde ele esta
+  const andando = len2(ELE.velAtual[0], ELE.velAtual[1]);
+  if (andando > .3){
+    ELE.passoT -= dt * andando;
+    if (ELE.passoT <= 0){
+      ELE.passoT = ELE.estado === "caca" ? 1.5 : 2.2;
+      SOM.passoDele(ELE.p);
+    }
+  }
+  ELE.grunhidoT -= dt;
+  if (ELE.grunhidoT <= 0 && distJ < 26){
+    ELE.grunhidoT = rand(6, 14);
+    if (ELE.estado === "caca") SOM.gritoDele(ELE.p);
+    else SOM.arranhao(ELE.p);
+  }
+
+  // pegou
+  if (distJ < 1.35 && !jogador.escondido) morrer();
+  // Escondido nao e imunidade: se ela chega ao lado e voce esta respirando, acabou.
+  if (jogador.escondido && distJ < 1.8 && ELE.estado !== "patrulha" && !jogador.prendendo) morrer();
+}
+
+function morrer(){
+  if (!jogador.vivo) return;
+  jogador.vivo = false;
+  SOM.pego();
+  piscada = 1;
+  $("#fade").classList.remove("claro");
+  estado = "morto";
+  document.body.classList.remove("jogando");
+  if (document.pointerLockElement) document.exitPointerLock();
+  telaFim(false);
+}
+function vencer(){
+  if (jogador.venceu) return;
+  jogador.venceu = true;
+  SOM.vitoria();
+  estado = "venceu";
+  document.body.classList.remove("jogando");
+  if (document.pointerLockElement) document.exitPointerLock();
+  telaFim(true);
+}
+
+/* ============================================================
+   5 · ENTRADA
+   ============================================================ */
+const teclas = {};
+let semTrava = false, miraX = 0, miraY = 0, temMira = false;
+const SENS = .0021;
+
+addEventListener("keydown", e => {
+  if (e.code === "Escape") return;
+  if (["Space","KeyW","KeyA","KeyS","KeyD","ControlLeft","KeyE","KeyF"].indexOf(e.code) >= 0) e.preventDefault();
+  if (teclas[e.code]) return;
+  teclas[e.code] = true;
+  if (estado !== "jogando") return;
+  if (e.code === "KeyF") alternarLanterna();
+  if (e.code === "KeyE") interagir();
+  if (e.code === "KeyM"){
+    mudo = !mudo;
+    if (mestre) mestre.gain.value = mudo ? 0 : .85;
+    mostrarDica(mudo ? "som desligado" : "som ligado", 1.2);
+  }
+});
+addEventListener("keyup", e => { teclas[e.code] = false; });
+addEventListener("blur", () => { for (const k in teclas) teclas[k] = false; });
+
+addEventListener("mousemove", e => {
+  if (estado !== "jogando") return;
+  if (document.pointerLockElement === canvas){
+    jogador.yaw -= e.movementX * SENS;
+    jogador.pitch = clamp(jogador.pitch - e.movementY * SENS, -1.4, 1.4);
+  } else if (semTrava){
+    const vw = innerWidth || 1, vh = innerHeight || 1;
+    miraX = clamp((e.clientX/vw)*2-1, -1, 1);
+    miraY = clamp((e.clientY/vh)*2-1, -1, 1);
+    temMira = true;
+  }
+});
+function deslizarMira(dt){
+  if (!semTrava || document.pointerLockElement || !temMira) return;
+  const zm = .14;
+  const ax = Math.abs(miraX) > zm ? Math.sign(miraX)*(Math.abs(miraX)-zm)/(1-zm) : 0;
+  const ay = Math.abs(miraY) > zm ? Math.sign(miraY)*(Math.abs(miraY)-zm)/(1-zm) : 0;
+  jogador.yaw -= ax*Math.abs(ax)*3.0*dt;
+  jogador.pitch = clamp(jogador.pitch - ay*Math.abs(ay)*2.0*dt, -1.4, 1.4);
+}
+function travarPonteiro(){
+  temMira = false;
+  if (!canvas.requestPointerLock){ semTrava = true; return; }
+  try {
+    const r = canvas.requestPointerLock();
+    if (r && r.catch) r.catch(() => { semTrava = true; });
+  } catch(e){ semTrava = true; }
+}
+document.addEventListener("pointerlockerror", () => { semTrava = true; });
+document.addEventListener("pointerlockchange", () => {
+  if (!document.pointerLockElement && estado === "jogando" && !semTrava) pausar();
+});
+
+function alternarLanterna(){
+  if (jogador.bateria <= 0){ SOM.bateria(); mostrarDica("bateria acabou", 1.4); return; }
+  jogador.lanterna = !jogador.lanterna;
+  SOM.bateria();
+}
+
+/* ---------- interagir ---------- */
+function maisPerto(){
+  let melhor = null, md = 2.4;
+  const chk = (obj, tipo) => {
+    const d = len2(obj.p[0]-jogador.p[0], obj.p[2]-jogador.p[2]);
+    if (d < md){ md = d; melhor = { obj, tipo }; }
+  };
+  fusiveis.forEach(f => { if (!f.pego) chk(f, "fusivel"); });
+  baterias.forEach(b => { if (!b.pego) chk(b, "bateria"); });
+  armarios.forEach(a => chk(a, "armario"));
+  if (quadro) chk(quadro, "quadro");
+  if (portao) chk(portao, "portao");
+  return melhor;
+}
+function interagir(){
+  if (jogador.escondido){
+    jogador.escondido = null;
+    SOM.armario();
+    fazerBarulho(9);
+    return;
+  }
+  const alvo = maisPerto();
+  if (!alvo) return;
+  if (alvo.tipo === "fusivel"){
+    alvo.obj.pego = true;
+    jogador.fusiveis++;
+    SOM.fusivel();
+    mostrarDica("fusível recolhido — leve ao quadro elétrico", 2.6);
+  } else if (alvo.tipo === "bateria"){
+    alvo.obj.pego = true;
+    jogador.bateria = Math.min(1, jogador.bateria + .45);
+    SOM.bateria();
+    mostrarDica("bateria trocada", 1.8);
+  } else if (alvo.tipo === "armario"){
+    jogador.escondido = alvo.obj;
+    jogador.p[0] = alvo.obj.p[0];
+    jogador.p[2] = alvo.obj.p[2];
+    SOM.armario();
+    fazerBarulho(7);
+    mostrarDica("E para sair · Espaço prende a respiração", 3);
+  } else if (alvo.tipo === "quadro"){
+    if (jogador.fusiveis <= 0){
+      mostrarDica("o quadro está vazio — faltam fusíveis", 2.2);
+      return;
+    }
+    jogador.instalados += jogador.fusiveis;
+    jogador.fusiveis = 0;
+    SOM.encaixe();
+    ELE.agressao = jogador.instalados * 0.5;
+    fazerBarulho(30);
+    if (jogador.instalados >= 5){
+      portao.aberto = true;
+      SOM.energia();
+      mostrarDica("energia restabelecida — o portão abriu", 4);
+      objetivo("volte à portaria");
+    } else {
+      mostrarDica(jogador.instalados + " de 5 instalados — ele ouviu isso", 3);
+      objetivo("faltam " + (5 - jogador.instalados) + " fusíveis");
+    }
+  } else if (alvo.tipo === "portao"){
+    if (portao.aberto) vencer();
+    else mostrarDica("trancado — sem energia não abre", 2.2);
+  }
+}
+
+/* ============================================================
+   6 · ATUALIZAÇÃO DO JOGADOR
+   ============================================================ */
+function atualizarJogador(dt){
+  deslizarMira(dt);
+
+  jogador.agachado = !!(teclas.ControlLeft || teclas.ControlRight);
+  jogador.prendendo = !!teclas.Space && !!jogador.escondido;
+
+  if (jogador.escondido){
+    // preso no armario: so o folego e o ar correm
+    if (jogador.prendendo){
+      jogador.ar = Math.max(0, jogador.ar - dt*.32);
+      if (jogador.ar <= 0){ jogador.prendendo = false; SOM.respirar(true); }
+    } else {
+      jogador.ar = Math.min(1, jogador.ar + dt*.22);
+      jogador.respiraT -= dt;
+      if (jogador.respiraT <= 0){
+        jogador.respiraT = 2.4;
+        SOM.respirar(jogador.folego < .4);
+      }
+    }
+    jogador.folego = Math.min(1, jogador.folego + dt*.30);
+    gastarBateria(dt);
+    return;
+  }
+
+  const querCorrer = (teclas.ShiftLeft || teclas.ShiftRight) && jogador.folego > .08 && !jogador.agachado;
+  jogador.correndo = false;
+
+  const f = [-Math.sin(jogador.yaw), -Math.cos(jogador.yaw)];
+  const d = [Math.cos(jogador.yaw), -Math.sin(jogador.yaw)];
+  let mx = 0, mz = 0;
+  if (teclas.KeyW){ mx += f[0]; mz += f[1]; }
+  if (teclas.KeyS){ mx -= f[0]; mz -= f[1]; }
+  if (teclas.KeyD){ mx += d[0]; mz += d[1]; }
+  if (teclas.KeyA){ mx -= d[0]; mz -= d[1]; }
+  const mag = len2(mx,mz);
+
+  let vel = jogador.agachado ? 1.75 : 3.25;
+  if (mag > 0 && querCorrer){ vel = 6.0; jogador.correndo = true; }
+
+  if (jogador.correndo) jogador.folego = Math.max(0, jogador.folego - dt*.27);
+  else jogador.folego = Math.min(1, jogador.folego + dt*(jogador.agachado ? .26 : .17));
+
+  if (mag > 0){
+    jogador.p[0] += mx/mag*vel*dt;
+    jogador.p[2] += mz/mag*vel*dt;
+    empurrarFora(jogador.p, .38);
+
+    // passos: som proprio + rastro que ele pode ouvir
+    jogador.passoT -= dt * vel;
+    if (jogador.passoT <= 0){
+      jogador.passoT = jogador.correndo ? 3.4 : (jogador.agachado ? 5.5 : 4.2);
+      SOM.passo(null, jogador.correndo);
+      fazerBarulho(jogador.correndo ? 24 : (jogador.agachado ? 2.5 : 8));
+    }
+    jogador.bob += dt * vel * 1.5;
+  } else {
+    jogador.bob = lerp(jogador.bob, Math.round(jogador.bob/Math.PI)*Math.PI, Math.min(1, dt*5));
+  }
+
+  // respiracao ofegante quando o folego acaba: te entrega e mete medo
+  jogador.respiraT -= dt;
+  if (jogador.respiraT <= 0){
+    const cansado = jogador.folego < .45;
+    jogador.respiraT = cansado ? 1.5 : 4.5;
+    if (cansado || jogador.medo > .4) SOM.respirar(cansado);
+    if (cansado) fazerBarulho(6);
+  }
+
+  gastarBateria(dt);
+}
+
+function gastarBateria(dt){
+  if (jogador.lanterna && jogador.bateria > 0){
+    jogador.bateria = Math.max(0, jogador.bateria - dt*0.0105);
+    if (jogador.bateria <= 0){
+      jogador.lanterna = false;
+      mostrarDica("a lanterna apagou", 2.4);
+      SOM.bateria();
+    }
+  }
+}
+
+/* medo: distancia + estado dele. dirige o pos-processamento e o coracao */
+function atualizarMedo(dt){
+  const d = len2(ELE.p[0]-jogador.p[0], ELE.p[2]-jogador.p[2]);
+  let alvo = clamp(1 - d/26, 0, 1);
+  if (ELE.estado === "caca") alvo = Math.max(alvo, .55);
+  if (d < 22 && visivel(ELE.p[0], ELE.p[2], jogador.p[0], jogador.p[2])) alvo = Math.min(1, alvo + .2);
+  if (jogador.escondido) alvo *= .85;
+  jogador.medo = lerp(jogador.medo, alvo, Math.min(1, dt*1.6));
+
+  jogador.batidaT -= dt;
+  if (jogador.batidaT <= 0 && (jogador.medo > .2 || jogador.folego < .4)){
+    const intervalo = .95 - jogador.medo*.55 - (1-jogador.folego)*.2;
+    jogador.batidaT = Math.max(.32, intervalo);
+    SOM.batida(.05 + jogador.medo*.22);
+  }
+  ajustarDrone(jogador.medo, ELE.estado === "caca");
+}
+
+/* sons soltos do predio: goteira, metal batendo, o lugar respirando */
+function ambiente(dt){
+  ambienteT -= dt;
+  if (ambienteT > 0) return;
+  ambienteT = rand(7, 18);
+  const c = centroSala(pick(SALAS));
+  const m = paraMundo(c[0], c[1]);
+  const pos = [m[0], 1.4, m[1]];
+  if (Math.random() < .5) SOM.gota(pos); else SOM.metal(pos);
+}
+
+/* ============================================================
+   7 · HUD
+   ============================================================ */
+const elObjetivo = $("#objetivo"), elDica = $("#dica"), elBat = $("#bateria"),
+      elBatFill = $("#bateria i"), elFol = $("#folego i"), elFus = $("#fusiveis .n"),
+      elEsc = $("#escondido"), elSuss = $("#sussurro"), elMira = $("#mira");
+let dicaT = 0;
+
+function mostrarDica(txt, dur){
+  elDica.textContent = txt;
+  elDica.classList.add("on");
+  dicaT = dur || 2;
+}
+function objetivo(txt){
+  elObjetivo.textContent = txt;
+  elObjetivo.classList.add("on");
+}
+function atualizarHud(dt){
+  elBatFill.style.width = (jogador.bateria*100).toFixed(1) + "%";
+  elBat.classList.toggle("fraca", jogador.bateria < .22);
+  elFol.style.width = (jogador.folego*100).toFixed(1) + "%";
+  elFus.innerHTML = jogador.fusiveis + '<span style="color:var(--dim)">/5</span>';
+  elEsc.classList.toggle("on", !!jogador.escondido);
+
+  if (dicaT > 0){
+    dicaT -= dt;
+    if (dicaT <= 0) elDica.classList.remove("on");
+  } else if (!jogador.escondido){
+    const alvo = maisPerto();
+    if (alvo){
+      const nomes = { fusivel:"E — pegar fusível", bateria:"E — pegar bateria",
+                      armario:"E — se esconder", quadro:"E — instalar fusíveis",
+                      portao: portao.aberto ? "E — sair" : "portão trancado" };
+      elDica.textContent = nomes[alvo.tipo];
+      elDica.classList.add("on");
+    } else elDica.classList.remove("on");
+  }
+
+  elMira.style.opacity = jogador.escondido ? "0" : ".6";
+  elSuss.classList.toggle("on", ELE.estado === "caca");
+  if (ELE.estado === "caca") elSuss.textContent = "ele te viu";
+}
+
+/* ============================================================
+   8 · RENDER
+   ============================================================ */
+const CORES = {
+  parede:[0.30,0.29,0.27], piso:[0.22,0.21,0.20], teto:[0.15,0.15,0.16],
+  armario:[0.26,0.28,0.30], quadro:[0.34,0.30,0.22],
+  fusivel:[1.0,0.72,0.20], bateria:[0.35,0.9,0.55],
+  ele:[0.055,0.05,0.06], olho:[0.9,0.12,0.12],
+  portaoAberto:[0.30,0.80,0.42], portaoTrancado:[0.26,0.10,0.10]
+};
+let piscada = 0;
+
+function render(tempo){
+  const asp = H > 0 ? W/H : 1;
+  const balanco = Math.sin(jogador.bob) * (jogador.correndo ? .055 : .028);
+  const lateral = Math.cos(jogador.bob*.5) * .02;
+  const tremor = jogador.medo > .55 ? (Math.random()-.5) * (jogador.medo-.55) * .05 : 0;
+
+  const alturaOlho = jogador.escondido ? .95 : (jogador.agachado ? OLHO_AGACHADO : OLHO_EM_PE);
+  const olho = [ jogador.p[0] + lateral*.3, alturaOlho + balanco + tremor, jogador.p[2] ];
+  const cp = Math.cos(jogador.pitch), sp = Math.sin(jogador.pitch);
+  const dir = [ -Math.sin(jogador.yaw)*cp, sp, -Math.cos(jogador.yaw)*cp ];
+
+  const proj = M4.persp((jogador.correndo ? 80 : 74) * Math.PI/180, asp, .04, 200);
+  const view = M4.mul(M4.mul(M4.rotZ(lateral*.25 + tremor*2), M4.rotX(-jogador.pitch)),
+               M4.mul(M4.rotY(-jogador.yaw), M4.trans(-olho[0], -olho[1], -olho[2])));
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+  gl.viewport(0, 0, W, H);
+  gl.useProgram(progMundo);
+  gl.enable(gl.DEPTH_TEST);
+  gl.enable(gl.CULL_FACE);
+  gl.disable(gl.BLEND);
+  gl.clearColor(0.004, 0.005, 0.009, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+  gl.uniformMatrix4fv(U.uProj, false, proj);
+  gl.uniformMatrix4fv(U.uView, false, view);
+  gl.uniform3f(U.uCam, olho[0], olho[1], olho[2]);
+  gl.uniform3f(U.uLanternaDir, dir[0], dir[1], dir[2]);
+  gl.uniform1f(U.uLanternaOn, (jogador.lanterna && jogador.bateria > 0) ? 1 : 0);
+  gl.uniform1f(U.uTempo, tempo);
+
+  // piso e teto: um plano cada; a névoa esconde onde acabam
+  const lado = Math.max(GW, GH) * CELL + 20;
+  desenhar(MESH.plano, M4.mul(M4.trans(0,0,0), M4.scale(lado,1,lado)), CORES.piso, 0, 1, 1);
+  desenhar(MESH.teto, M4.mul(M4.trans(0,ALTURA,0), M4.scale(lado,1,lado)), CORES.teto, 0, 1, 0);
+
+  // paredes — só as próximas; o resto a névoa come de qualquer jeito
+  const corte = 46;
+  for (let i = 0; i < blocos.length; i++){
+    const b = blocos[i];
+    if (Math.abs(b.x-olho[0]) > corte || Math.abs(b.z-olho[2]) > corte) continue;
+    desenharCaixa(b.x, ALTURA/2, b.z, b.sx, ALTURA, b.sz, CORES.parede, 0);
+  }
+
+  // armarios
+  for (let i = 0; i < armarios.length; i++){
+    const a = armarios[i];
+    if (Math.abs(a.p[0]-olho[0]) > corte || Math.abs(a.p[2]-olho[2]) > corte) continue;
+    desenharCaixa(a.p[0], 1.0, a.p[2], 1.0, 2.0, .62, CORES.armario, 0);
+    desenharCaixa(a.p[0], 1.35, a.p[2] + .33, .55, .06, .04, [.12,.12,.13], 0);
+  }
+
+  // quadro eletrico, com uma luz por fusivel instalado
+  desenharCaixa(quadro.p[0], 1.3, quadro.p[2], 1.5, 1.9, .42, CORES.quadro, 0);
+  for (let k = 0; k < 5; k++){
+    const aceso = k < jogador.instalados;
+    desenharCaixa(quadro.p[0] - .5 + k*.25, 1.55, quadro.p[2] + .24, .13, .3, .06,
+      aceso ? [1,.75,.25] : [.14,.13,.12], aceso ? 1 : 0);
+  }
+
+  // portao
+  desenharCaixa(portao.p[0], 1.6, portao.p[2], 2.4, 3.2, .3,
+    portao.aberto ? CORES.portaoAberto : CORES.portaoTrancado, portao.aberto ? .5 : 0);
+
+  // itens: brilham de leve, senão ninguém acha no escuro
+  const pulso = .78 + Math.sin(tempo*2.6)*.22;
+  for (let i = 0; i < fusiveis.length; i++){
+    const f = fusiveis[i];
+    if (f.pego) continue;
+    desenhar(MESH.caixa, M4.mul(M4.mul(M4.trans(f.p[0], f.p[1] + Math.sin(tempo*1.6+i)*.06, f.p[2]),
+      M4.rotY(tempo*.9 + i)), M4.scale(.2,.34,.2)), CORES.fusivel, pulso, 1, 0);
+  }
+  for (let i = 0; i < baterias.length; i++){
+    const b = baterias[i];
+    if (b.pego) continue;
+    desenhar(MESH.caixa, M4.mul(M4.mul(M4.trans(b.p[0], b.p[1], b.p[2]),
+      M4.rotY(tempo*.6 + i)), M4.scale(.16,.26,.16)), CORES.bateria, pulso*.7, 1, 0);
+  }
+
+  // ele: silhueta comprida e magra, com dois pontos vermelhos
+  const dELE = len2(ELE.p[0]-olho[0], ELE.p[2]-olho[2]);
+  if (dELE < 52){
+    const fr = direcaoDele();
+    const giro = Math.atan2(fr[0], fr[1]);
+    const anda = len2(ELE.velAtual[0], ELE.velAtual[1]);
+    const passo = Math.sin(tempo*(2 + anda*1.6));
+    const base = M4.mul(M4.trans(ELE.p[0], 0, ELE.p[2]), M4.rotY(giro));
+    const parte = (x,y,z, sx,sy,sz, cor, em) =>
+      desenhar(MESH.caixa, M4.mul(M4.mul(base, M4.trans(x,y,z)), M4.scale(sx,sy,sz)), cor, em||0, 1, 0);
+
+    parte(0, 1.35, 0, .52, 1.25, .34, CORES.ele);                  // tronco
+    parte(0, 2.18, .04, .27, .34, .3, CORES.ele);                  // cabeca
+    parte(-.34, 1.35 + passo*.1, .05, .15, 1.15, .15, CORES.ele);  // bracos longos demais
+    parte(.34, 1.35 - passo*.1, .05, .15, 1.15, .15, CORES.ele);
+    parte(-.16, .38, passo*.2, .17, .78, .17, CORES.ele);          // pernas
+    parte(.16, .38, -passo*.2, .17, .78, .17, CORES.ele);
+    const brilho = ELE.estado === "caca" ? 1 : .55;
+    parte(-.09, 2.2, .18, .055, .035, .03, CORES.olho, brilho);
+    parte(.09, 2.2, .18, .055, .035, .03, CORES.olho, brilho);
+  }
+
+  /* ---- pós-processamento ---- */
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, W, H);
+  gl.useProgram(progPos);
+  gl.disable(gl.DEPTH_TEST);
+  gl.disable(gl.CULL_FACE);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, texCena);
+  gl.uniform1i(P.uCena, 0);
+  gl.uniform1f(P.uTempo, tempo);
+  gl.uniform1f(P.uMedo, jogador.escondido ? jogador.medo*.7 : jogador.medo);
+  gl.uniform1f(P.uPiscada, piscada);
+  gl.bindVertexArray(vaoVazio);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+}
+
+/* ============================================================
+   9 · ESTADO E LAÇO
+   ============================================================ */
+let estado = "menu";
+const elCorpo = $("#corpo");
+
+function telaFim(venceu){
+  elCorpo.innerHTML = venceu
+    ? '<h1>VOCÊ <b style="color:var(--osso)">SAIU</b></h1>' +
+      '<div class="sub">Turno encerrado às 3h47</div>' +
+      '<p class="hist">O portão fechou atrás de você. A subestação voltou a ficar quieta.<br><br>' +
+      'Ninguém acreditou.</p>' +
+      '<button id="comecar">Descer de novo</button>'
+    : '<h1>ELE TE <b>PEGOU</b></h1>' +
+      '<div class="sub">' + jogador.instalados + ' de 5 fusíveis instalados</div>' +
+      '<p class="hist">A lanterna rolou pelo chão e continuou acesa,<br>apontada para a parede.</p>' +
+      '<button id="comecar">Tentar de novo</button>';
+  ligarBotao();
+}
+function telaPausa(){
+  elCorpo.innerHTML = '<h1>PARADO</h1>' +
+    '<div class="sub">' + jogador.instalados + ' de 5 fusíveis · bateria ' +
+    Math.round(jogador.bateria*100) + '%</div>' +
+    '<div class="teclas" style="max-width:420px">' +
+    '<div><kbd>W A S D</kbd>andar</div><div><kbd>Shift</kbd>correr</div>' +
+    '<div><kbd>F</kbd>lanterna</div><div><kbd>E</kbd>pegar / usar</div>' +
+    '<div><kbd>Ctrl</kbd>agachar</div><div><kbd>Espaço</kbd>prender o ar</div></div>' +
+    '<button id="comecar">Continuar</button>';
+  ligarBotao();
+}
+function pausar(){
+  if (estado !== "jogando") return;
+  estado = "pausa";
+  document.body.classList.remove("jogando");
+  telaPausa();
+}
+function ligarBotao(){
+  const b = $("#comecar");
+  if (!b) return;
+  b.onclick = () => {
+    audioIniciar();
+    if (estado === "pausa"){
+      estado = "jogando";
+      document.body.classList.add("jogando");
+      travarPonteiro();
+    } else comecar();
+  };
+}
+function comecar(){
+  if (!gerarNivel()){
+    mostrarDica("falha ao gerar a planta", 5);
+    return;
+  }
+  jogador.yaw = 0; jogador.pitch = 0;
+  jogador.folego = 1; jogador.bateria = 1; jogador.lanterna = true;
+  jogador.escondido = null; jogador.ar = 1;
+  jogador.fusiveis = 0; jogador.instalados = 0;
+  jogador.medo = 0; jogador.vivo = true; jogador.venceu = false;
+  jogador.bob = 0; jogador.passoT = 0; jogador.batidaT = 0; jogador.respiraT = 2;
+  // abertura vem do preto pelo CSS; o clarao branco fica so para a morte
+  const fade = $("#fade");
+  fade.classList.remove("claro");
+  requestAnimationFrame(() => requestAnimationFrame(() => fade.classList.add("claro")));
+  estado = "jogando";
+  document.body.classList.add("jogando");
+  objetivo("ache cinco fusíveis");
+  mostrarDica("F acende a lanterna", 3.5);
+  travarPonteiro();
+}
+ligarBotao();
+
+let anterior = performance.now(), tempo = 0;
+function laco(agora){
+  requestAnimationFrame(laco);
+  let dt = (agora - anterior) / 1000;
+  anterior = agora;
+  if (dt > .05) dt = .05;
+  redimensionar();
+  if (!fbo) return;
+
+  if (estado === "jogando"){
+    tempo += dt;
+    atualizarJogador(dt);
+    atualizarELE(dt);
+    atualizarMedo(dt);
+    ambiente(dt);
+    atualizarHud(dt);
+    const fdir = [-Math.sin(jogador.yaw), -Math.cos(jogador.yaw)];
+    ouvinteEm([jogador.p[0], 1.6, jogador.p[2]], fdir[0], fdir[1]);
+  }
+  piscada = Math.max(0, piscada - dt*1.6);
+  render(tempo);
+}
+
+vaoVazio = gl.createVertexArray();
+redimensionar();
+construirPredio();
+montarBlocos();
+povoar();
+
+/* ------------------------------------------------------------
+   Auto-teste: abra com ?selftest na URL.
+   Roda a partida sem janela e confere que o prédio é atravessável,
+   que a criatura caça de verdade e que o armário salva. O resultado
+   fica em window.__selftest para automação ler.
+   ------------------------------------------------------------ */
+if (location.search.indexOf("selftest") >= 0){
+  const notas = [];
+  let tudoOk = true;
+  const nota = (texto, cond) => {
+    notas.push((cond ? "ok    " : "FALHA ") + texto);
+    if (!cond) tudoOk = false;
+  };
+
+  nota("planta gerada, tudo alcançável", gerarNivel());
+
+  let livres = 0;
+  for (let i = 0; i < grade.length; i++) if (grade[i] === 0) livres++;
+  nota("área caminhável: " + livres + " células", livres > 400);
+
+  const pc = paraCelula(jogador.p[0], jogador.p[2]);
+  nota("jogador nasce em chão livre", !parede(pc[0], pc[1]));
+
+  const d0 = len2(ELE.p[0]-jogador.p[0], ELE.p[2]-jogador.p[2]);
+  nota("criatura começa longe: " + d0.toFixed(1) + " m", d0 > 28);
+
+  nota("5 fusíveis no mapa", fusiveis.length === 5);
+  nota("armários espalhados: " + armarios.length, armarios.length >= 8);
+
+  // 1) ela patrulha sozinha, sem o jogador fazer nada
+  estado = "jogando";
+  jogador.lanterna = false;
+  jogador.agachado = true;
+  const antes = [ELE.p[0], ELE.p[2]];
+  let maiorDist = 0;
+  for (let i = 0; i < 900; i++){
+    atualizarELE(1/60);
+    maiorDist = Math.max(maiorDist, len2(ELE.p[0]-antes[0], ELE.p[2]-antes[1]));
+  }
+  nota("criatura patrulha sozinha: andou " + maiorDist.toFixed(1) + " m", maiorDist > 8);
+
+  // 2) com a lanterna acesa e sem se mexer, ela acaba te achando
+  jogador.lanterna = true;
+  jogador.agachado = false;
+  jogador.vivo = true;
+  let pego = false, segundos = 0, menorDist = 999, vezesCaca = 0, estadoAnterior = "";
+  for (let i = 0; i < 60*180; i++){
+    atualizarELE(1/60);
+    segundos = i/60;
+    menorDist = Math.min(menorDist, len2(ELE.p[0]-jogador.p[0], ELE.p[2]-jogador.p[2]));
+    if (ELE.estado === "caca" && estadoAnterior !== "caca") vezesCaca++;
+    estadoAnterior = ELE.estado;
+    if (!jogador.vivo){ pego = true; break; }
+  }
+  notas.push("      diagnostico: chegou a " + menorDist.toFixed(1) + " m, cacou " + vezesCaca + "x");
+  nota("caça e alcança o jogador parado em " + segundos.toFixed(0) + " s", pego);
+
+  // 3) o armário salva: mesmo com ela caçando, prender o ar segura
+  jogador.vivo = true;
+  estado = "jogando";
+  jogador.escondido = armarios[0];
+  jogador.p[0] = armarios[0].p[0];
+  jogador.p[2] = armarios[0].p[2];
+  jogador.prendendo = true;
+  ELE.estado = "caca";
+  ELE.paciencia = 10;
+  ELE.p[0] = jogador.p[0] + 1.0;
+  ELE.p[2] = jogador.p[2];
+  let sobreviveu = true;
+  for (let i = 0; i < 60*20; i++){
+    atualizarELE(1/60);
+    if (!jogador.vivo){ sobreviveu = false; break; }
+  }
+  nota("escondido e com o ar preso, sobrevive ao lado dela", sobreviveu);
+
+  // 4) sem prender o ar, no mesmo lugar, ela pega
+  jogador.vivo = true;
+  estado = "jogando";
+  jogador.prendendo = false;
+  ELE.estado = "caca";
+  ELE.paciencia = 10;
+  ELE.p[0] = jogador.p[0] + 1.0;
+  ELE.p[2] = jogador.p[2];
+  let pegouRespirando = false;
+  for (let i = 0; i < 60*20; i++){
+    atualizarELE(1/60);
+    if (!jogador.vivo){ pegouRespirando = true; break; }
+  }
+  nota("respirando no armário, ela te acha", pegouRespirando);
+
+  // 5) nada vira NaN depois de tudo isso
+  nota("posições finitas", isFinite(ELE.p[0]) && isFinite(ELE.p[2]) &&
+       isFinite(jogador.p[0]) && isFinite(jogador.p[2]));
+
+  window.__selftest = { ok: tudoOk, notas };
+  document.title = (tudoOk ? "ok " : "FALHA ") + notas.length + " checagens";
+  console.log("auto-teste:\n" + notas.join("\n"));
+  estado = "menu";
+  jogador.escondido = null;
+  document.body.classList.remove("jogando");
+}
+requestAnimationFrame(laco);
+
+})();
+</script>
+</body>
+</html>
