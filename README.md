@@ -1,178 +1,91 @@
-# Neon Arena
+# Turno da Noite
 
-FPS 3D de arena por ondas, escrito do zero em três versões que compartilham a mesma lógica de jogo:
+Jogo de terror e sobrevivência em 3D, escrito do zero — sem engine, sem biblioteca, sem um único arquivo de imagem ou som no repositório.
 
-| Versão | Roda com | Estado |
-|---|---|---|
-| **Web** | só o navegador, sem instalar nada | motor 3D próprio em WebGL2 |
-| **Godot 4** | Godot Mono (gratuito, 120 MB) | testado automaticamente |
-| **Unity** | Unity 6 (gratuito no plano Personal) | sintaxe verificada, não executado |
+Você é o vigia de uma subestação desativada. A energia caiu. Para abrir o portão você precisa achar **cinco fusíveis** e levá-los ao quadro elétrico do subsolo. Tem outra coisa lá dentro, e você não tem arma.
 
-A ideia que segura tudo: **o motor gráfico só desenha**. A partida inteira — física, colisão, IA, armas, ondas, pontuação — vive em C# puro, sem uma linha de `UnityEngine` ou `Godot`. Por isso ela cabe num projeto de testes e roda igual nos três lugares.
+**Jogue agora:** abra [`horror/turno-da-noite.html`](horror/turno-da-noite.html) com duplo clique. Um arquivo, ~60 KB, nenhuma dependência. **Use fone de ouvido** — a direção do som é a única defesa que o jogo oferece.
 
----
+## As três regras que fazem o jogo
 
-## Jogar agora, sem instalar nada
+1. **A lanterna é um dilema.** Acesa, você enxerga — e ela te vê de 34 metros. Apagada, ela só te percebe de perto e de frente. A bateria acaba.
+2. **Ela caça por som.** Correr faz barulho num raio de 24 metros, andar 8, agachado quase nada. Ofegante, você se entrega sozinho.
+3. **O armário não é imunidade.** Se ela chegar do lado e você estiver respirando, acabou. Segure o ar — mas o ar também acaba.
 
-Abra **`dist/neon-arena.html`** com duplo clique. É um arquivo único de ~60 KB, sem dependências, sem servidor, sem internet.
-
-### Controles
+Cada fusível instalado deixa ela mais rápida e mais agressiva. O jogo fica pior justamente quando você está quase saindo.
 
 | Tecla | Ação |
 |---|---|
-| `W` `A` `S` `D` | mover |
-| Mouse / clique esquerdo | mirar / atirar |
-| `Shift` | correr |
-| `Espaço` | pular (dá para subir nos engradados) |
-| `R` | recarregar |
-| `1` `2` | rifle / shotgun |
-| `Esc` | pausar e liberar o mouse |
-| `M` | mudo |
+| `W A S D` | andar |
+| `Shift` | correr (barulhento) |
+| `Ctrl` | agachar (silencioso) |
+| `F` | lanterna |
+| `E` | pegar / usar / esconder |
+| `Espaço` | prender a respiração |
+| `Esc` / `M` | pausar / mudo |
 
-Acertar o **núcleo brilhante** de um inimigo causa dano dobrado. Abates rápidos acumulam combo até 8×.
+## Como ele foi feito
 
----
+Terror não precisa de gráfico bonito — precisa de escuridão, som e ritmo. Foi nisso que o motor foi gasto:
 
-## O que tem dentro
-
-```
-neon-arena/
-├── dist/neon-arena.html        jogo web pronto, arquivo único
-├── index.html                  versão de desenvolvimento (carrega os módulos)
-├── src/                        motor 3D + jogo, 12 módulos ES (~1.330 linhas)
-│   ├── utils.js                matemática: matrizes 4x4, vetores, normais
-│   ├── gl.js                   WebGL2: contexto, shaders GLSL, malhas, desenho
-│   ├── world.js                arena e colisão (raycast, empurrão, chão)
-│   ├── entities.js             jogador, inimigos, partículas
-│   ├── combat.js               tiro, dano, abate
-│   ├── update.js               laço de simulação
-│   ├── render.js               composição do quadro
-│   └── ...                     áudio, entrada, HUD, estado, ponto de entrada
-├── tools/
-│   ├── serve.ps1               servidor de desenvolvimento
-│   ├── build.ps1               empacota src/ em dist/neon-arena.html
-│   └── push-github.ps1         publica no GitHub
-├── unity/Assets/Scripts/
-│   ├── Core/                   ⭐ a lógica compartilhada, C# puro
-│   │   ├── Vec3.cs             vetor próprio (para não depender de motor)
-│   │   ├── Geometry.cs         raio×caixa, raio×esfera, colisão, chão
-│   │   ├── ArenaLayout.cs      a planta da arena
-│   │   ├── Rules.cs            armas, inimigos, ondas, pontuação
-│   │   └── Sim.cs              a partida inteira, sem motor gráfico
-│   └── Runtime/                camada Unity (só desenha)
-├── godot/                      projeto Godot 4 (só desenha)
-└── csharp/NeonArena.Tests/     85 testes xUnit sobre o Core
-```
-
-O `Core/` mora dentro de `unity/Assets/` por uma imposição do Unity, que só compila scripts abaixo de `Assets/`. O Godot e os testes compilam **os mesmos arquivos** por caminho relativo — não existe cópia duplicada para manter em sincronia.
-
----
-
-## Nada de engine na versão web
-
-Não há Three.js, nem Babylon, nem biblioteca alguma. Está tudo escrito à mão:
-
-- **Matrizes 4×4** em ordem de coluna, com `perspective`, `rotate`, `translate`, `scale` e a inversa-transposta que corrige as normais sob escala não uniforme
-- **Shaders GLSL** (vértice e fragmento) com luz direcional, preenchimento frio, brilho de borda por fresnel, névoa exponencial e grade procedural no piso
-- **Geradores de malha**: cubo, esfera UV e plano, com a ordem dos vértices certa para o descarte de faces traseiras
-- **Interseções**: raio×esfera e raio×caixa pelo método das fatias
-- **Áudio sintetizado** no WebAudio: nenhum arquivo de som no repositório
-
----
-
-## Rodar as três versões
-
-### Web, modo desenvolvimento
-
-Módulos ES não carregam por `file://`, então precisa de um servidor:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File tools\serve.ps1
-```
-
-Abra `http://127.0.0.1:8080/`. Para gerar o arquivo único de novo:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File tools\build.ps1
-```
-
-### Godot 4
-
-**Instalação, passo a passo:**
-
-1. Baixe o Godot em <https://godotengine.org/download> — escolha a versão **.NET / Mono** (a comum não roda C#)
-   - Pelo terminal: `winget install GodotEngine.GodotEngine.Mono`
-2. Instale também o **.NET SDK 8 ou mais novo**: <https://dotnet.microsoft.com/download>
-   - Pelo terminal: `winget install Microsoft.DotNet.SDK.10`
-3. Abra o Godot, clique em **Import**, aponte para a pasta `godot/` deste repositório
-4. Aperte **F5**
-
-Não precisa de conta e não tem teto de faturamento: a licença é MIT.
-
-Para conferir sem abrir janela nenhuma:
-
-```powershell
-godot --headless --path godot -- --selftest
-```
-
-Roda 15 segundos de partida e imprime se a onda começou, se os inimigos nasceram e se o dano chegou. Sai com código 0 quando está tudo certo.
-
-### Unity
-
-**Instalação, passo a passo:**
-
-1. Crie uma conta gratuita em <https://unity.com> (o plano **Personal** é gratuito abaixo de um teto de faturamento — confira os termos atuais, eles mudam)
-2. Baixe o **Unity Hub**: <https://unity.com/download>
-3. No Hub, aba **Installs** → **Install Editor** → escolha o **Unity 6 LTS** (~12 GB com os módulos)
-4. Aba **Projects** → **New project** → modelo **3D (Built-in)** ou **3D (URP)**, os dois funcionam
-5. Copie a pasta `unity/Assets/Scripts` deste repositório para dentro de `Assets/` do projeto novo
-6. Na cena vazia: menu **GameObject → Create Empty**, e no Inspector **Add Component → Neon Arena → Game Bootstrap**
-7. Aperte **Play**
-
-Não há prefab, material nem cena para configurar: o `GameBootstrap` monta câmera, luzes, arena e HUD por código.
-
----
+- **Lanterna no shader**: cone com borda macia, queda quadrática e um halo de vazamento em volta. É a única fonte de luz real do jogo; o ambiente é quase zero, de propósito.
+- **Pós-processamento** num framebuffer separado: granulado de filme, vinheta pesada, aberração cromática e chuvisco de estática — todos crescendo com o medo, que por sua vez vem da distância e do estado dela.
+- **Áudio posicional** com `PannerNode` em HRTF: os passos dela chegam do lado certo do fone. Nenhum arquivo de áudio — tudo é oscilador e ruído filtrado gerados na hora.
+- **O prédio** é uma grade de células com nove cômodos e corredores escavados, com ciclos de propósito para você ter rota de fuga. Uma busca em largura valida a planta antes de começar: item inalcançável trava o jogo em silêncio, então isso é verificado, não torcido.
+- **A criatura** anda pela mesma busca em largura, com quatro estados — patrulha, investiga, caça, procura. Quando fica tempo demais sem pista, ela começa a apertar o cerco na sua direção.
 
 ## Testes
 
-São 113 no total: 85 em C# e 28 no motor web.
+Abra o jogo com `?selftest` na URL: <http://127.0.0.1:8080/horror/turno-da-noite.html?selftest>
 
-### C# — o núcleo compartilhado
+São 12 checagens que rodam a partida sem janela — planta conectada, criatura patrulhando o prédio inteiro, perseguição alcançando o jogador, armário salvando com o ar preso e falhando sem ele. O resultado sai no console e em `window.__selftest`.
 
-```powershell
-cd csharp\NeonArena.Tests
-dotnet test
-```
+Três bugs saíram daí, e nenhum deles apareceria só olhando a tela:
 
-85 testes cobrindo:
-
-- **Geometria** — raio×caixa de frente, de lado, na diagonal, com origem dentro; raio×esfera tangente e por trás
-- **Colisão** — empurrão para fora de engradado, subir em cima, não teleportar por baixo, cobertura bloqueando linha de visão
-- **Arena** — as quatro paredes fecham o perímetro em 36 direções
-- **Regras** — runner só a partir da onda 2, brute da 3, teto de 28 inimigos, vida escalando 11% por onda, núcleo dobrando o dano, combo com teto
-- **Simulação** — pulo sobe e volta, diagonal não é mais rápida que reta, parede não é atravessada nem com quadro de 2 segundos, recarga consome reserva, combo zera ao levar dano, partida chega à onda 12, nada vira `NaN` em partida longa, e a mesma semente reproduz a mesma partida
-
-O gerador aleatório é um xorshift com semente, então os testes repetem a partida exatamente.
-
-### JavaScript — o motor web
-
-Suba o servidor e abra <http://127.0.0.1:8080/tests/>. São 28 testes sobre as matrizes 4×4 (identidade, não comutatividade, quatro rotações voltando ao início, perspectiva, matriz normal sob escala não uniforme, base ortonormal), as interseções e a colisão da arena. A página mostra o resultado em verde ou vermelho e também deixa tudo em `window.__testResults`, para automação.
+- a criatura recalculava o destino a cada 1,1 s, trocava de ideia antes de sair do lugar e nunca cruzava o prédio
+- ela perseguia centros de célula e parava a 1,7 m de você, sem nunca fechar o último passo
+- o armário protegia mesmo sem prender a respiração, o que anulava a mecânica central
 
 ---
+
+# Neon Arena (o protótipo anterior)
+
+Antes deste, saiu um FPS de arena por ondas. Ele funciona e está testado, mas é um demo técnico: cubos atirando em esferas, sem peso e sem susto. Ficou no repositório porque o motor 3D dele é a base de tudo e porque os testes têm valor próprio.
+
+Jogue em [`dist/neon-arena.html`](dist/neon-arena.html).
+
+O que ele tem de interessante:
+
+- **`src/`** — motor WebGL2 em 12 módulos: matrizes 4×4, projeção em perspectiva, matriz normal por inversa-transposta, shaders GLSL, raycast contra esfera e AABB
+- **`unity/Assets/Scripts/Core/`** — a partida inteira em C# puro, sem uma linha de `UnityEngine`: `Sim.cs` roda física, IA, armas e ondas
+- **`godot/`** e **`unity/.../Runtime/`** — dois motores lendo o mesmo núcleo, cada um só desenhando
+- **`csharp/NeonArena.Tests/`** — 85 testes xUnit; mais 28 no motor web em [`tests/`](tests/)
+
+### Rodar
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools\serve.ps1     # servidor local
+powershell -ExecutionPolicy Bypass -File tools\build.ps1     # empacota src/ em dist/
+cd csharp\NeonArena.Tests; dotnet test                       # 85 testes C#
+godot --headless --path godot -- --selftest                  # auto-teste do Godot
+```
+
+### Instalar Godot ou Unity
+
+**Godot 4** (gratuito de verdade, licença MIT, ~120 MB): baixe a versão **.NET/Mono** em <https://godotengine.org/download> — `winget install GodotEngine.GodotEngine.Mono`. Precisa também do .NET SDK 8+. No editor: **Import**, aponte para `godot/`, aperte F5.
+
+**Unity 6** (gratuito no plano Personal, abaixo de um teto de faturamento; exige conta e ~12 GB): instale o Hub em <https://unity.com/download>, crie um projeto **3D**, copie `unity/Assets/Scripts` para dentro de `Assets/`, adicione o componente **Neon Arena → Game Bootstrap** a um objeto vazio e aperte Play.
 
 ## O que foi verificado, e o que não foi
 
-Sendo honesto sobre o nível de prova de cada parte:
-
-| Parte | Como foi verificada |
+| Parte | Prova |
 |---|---|
-| Núcleo C# | 85 testes automatizados, todos passando |
-| Godot | compila sem avisos, e o auto-teste headless roda 15 s de partida |
-| Web | aberto no navegador; menu, arena, raycast, dano, ondas e fim de jogo conferidos |
-| Unity | **só a sintaxe.** Compilei os scripts fora do Unity: os 108 erros são todos `CS0246`/`CS0234`, isto é, "UnityEngine não existe" — nenhum erro de sintaxe. As chamadas de API do Unity **não** foram executadas, porque o editor não está instalado nesta máquina. Você será a primeira pessoa a rodar. |
-
----
+| Turno da Noite | 12 checagens automáticas + jogado no navegador |
+| Núcleo C# | 85 testes xUnit passando |
+| Godot | compila sem avisos; auto-teste headless roda 15 s de partida |
+| Neon Arena (web) | 28 testes + conferido no navegador |
+| Unity | **só a sintaxe.** Compilado fora do editor: os 108 erros são todos "UnityEngine não existe". As chamadas de API nunca foram executadas — o editor não está instalado aqui |
 
 ## Licença
 
-MIT — veja [LICENSE](LICENSE). Faça o que quiser com isso.
+MIT — veja [LICENSE](LICENSE).

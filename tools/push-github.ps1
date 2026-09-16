@@ -12,7 +12,7 @@
   O script não guarda senha nem token: quem cuida disso é o próprio gh.
 #>
 param(
-  [string]$RepoName = 'neon-arena',
+  [string]$RepoName = 'turno-da-noite',
   [ValidateSet('public', 'private')][string]$Visibility = 'public'
 )
 
@@ -87,7 +87,7 @@ Log "PRONTO: $url"
 if ($Visibility -eq 'public') {
   & $gh api -X POST "repos/$user/$RepoName/pages" -f "source[branch]=main" -f "source[path]=/" 2>&1 | Out-Null
   if ($LASTEXITCODE -eq 0) {
-    Log "Pages ligado: https://$user.github.io/$RepoName/dist/neon-arena.html"
+    Log "Pages ligado: https://$user.github.io/$RepoName/horror/turno-da-noite.html"
   } else {
     Log 'Pages não foi ligado automaticamente (dá para ligar em Settings > Pages).'
   }
