@@ -135,6 +135,10 @@ Não há prefab, material nem cena para configurar: o `GameBootstrap` monta câm
 
 ## Testes
 
+São 113 no total: 85 em C# e 28 no motor web.
+
+### C# — o núcleo compartilhado
+
 ```powershell
 cd csharp\NeonArena.Tests
 dotnet test
@@ -149,6 +153,10 @@ dotnet test
 - **Simulação** — pulo sobe e volta, diagonal não é mais rápida que reta, parede não é atravessada nem com quadro de 2 segundos, recarga consome reserva, combo zera ao levar dano, partida chega à onda 12, nada vira `NaN` em partida longa, e a mesma semente reproduz a mesma partida
 
 O gerador aleatório é um xorshift com semente, então os testes repetem a partida exatamente.
+
+### JavaScript — o motor web
+
+Suba o servidor e abra <http://127.0.0.1:8080/tests/>. São 28 testes sobre as matrizes 4×4 (identidade, não comutatividade, quatro rotações voltando ao início, perspectiva, matriz normal sob escala não uniforme, base ortonormal), as interseções e a colisão da arena. A página mostra o resultado em verde ou vermelho e também deixa tudo em `window.__testResults`, para automação.
 
 ---
 

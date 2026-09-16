@@ -527,7 +527,6 @@ function drawBox(x,y,z, sx,sy,sz, color, emissive, alpha){
   draw(MESH.box, M4.mul(M4.trans(x,y,z), M4.scale(sx,sy,sz)), color, emissive, alpha, 0, true);
 }
 
-let W = 0, H = 0;
 function resize(){
   const dpr = Math.min(devicePixelRatio || 1, 2);
   W = Math.floor(innerWidth * dpr);
@@ -1009,9 +1008,14 @@ addEventListener("keydown", e => {
 addEventListener("keyup", e => { keys[e.code] = false; });
 addEventListener("blur", () => { for (const k in keys) keys[k] = false; mouseDown = false; });
 
-canvas.addEventListener("mousedown", e => {
-  if (G.state === "play" && e.button === 0){ mouseDown = true; e.preventDefault(); }
-});
+/* O canvas sÃ³ existe depois de initGL(), e imports sÃ£o avaliados antes do corpo
+   de quem importa â€” por isso este listener nÃ£o pode ser registrado no topo do
+   mÃ³dulo. O main.js chama initInput() assim que o WebGL sobe. */
+function initInput(){
+  canvas.addEventListener("mousedown", e => {
+    if (G.state === "play" && e.button === 0){ mouseDown = true; e.preventDefault(); }
+  });
+}
 addEventListener("mouseup", e => { if (e.button === 0) mouseDown = false; });
 addEventListener("contextmenu", e => { if (G.state === "play") e.preventDefault(); });
 
@@ -1503,6 +1507,7 @@ if (!initGL()){
   $("#err").style.display = "block";
   $("#err").innerHTML = "<b>Seu navegador nÃ£o tem WebGL2.</b><br>Abra no Chrome, Edge ou Firefox atualizado.";
 } else {
+  initInput();
   bindStart();
   requestAnimationFrame(frame);
 }

@@ -1,4 +1,4 @@
-<#
+﻿<#
   Servidor estático mínimo para desenvolvimento.
 
   Por que existe: o jogo em src/ usa módulos ES (import/export). O navegador

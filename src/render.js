@@ -1,7 +1,7 @@
-import { M4, norm3, lerp, rand, TAU } from "./utils.js";
+import { M4, norm3, lerp, rand, clamp, sub3, len3, TAU } from "./utils.js";
 import { gl, U, MESH, W, H, FOG, draw, drawBox, resetDrawCache } from "./gl.js";
 import { boxes } from "./world.js";
-import { player, enemies, bolts, pickups, parts, beams, ETYPE, WEAPONS } from "./entities.js";
+import { player, enemies, bolts, pickups, parts, beams, ETYPE, WEAPONS, burst } from "./entities.js";
 import { G } from "./game-state.js";
 /* =======================================================================
    10 · RENDER

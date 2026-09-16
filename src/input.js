@@ -27,9 +27,14 @@ addEventListener("keydown", e => {
 addEventListener("keyup", e => { keys[e.code] = false; });
 addEventListener("blur", () => { for (const k in keys) keys[k] = false; mouseDown = false; });
 
-canvas.addEventListener("mousedown", e => {
-  if (G.state === "play" && e.button === 0){ mouseDown = true; e.preventDefault(); }
-});
+/* O canvas só existe depois de initGL(), e imports são avaliados antes do corpo
+   de quem importa — por isso este listener não pode ser registrado no topo do
+   módulo. O main.js chama initInput() assim que o WebGL sobe. */
+export function initInput(){
+  canvas.addEventListener("mousedown", e => {
+    if (G.state === "play" && e.button === 0){ mouseDown = true; e.preventDefault(); }
+  });
+}
 addEventListener("mouseup", e => { if (e.button === 0) mouseDown = false; });
 addEventListener("contextmenu", e => { if (G.state === "play") e.preventDefault(); });
 

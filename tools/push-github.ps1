@@ -1,4 +1,4 @@
-<#
+﻿<#
   Sobe o repositório para o GitHub.
 
   Roda sozinho pela Tarefa Agendada do Windows ("Neon Arena - push GitHub"),

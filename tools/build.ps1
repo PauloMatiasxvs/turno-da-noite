@@ -1,4 +1,4 @@
-<#
+﻿<#
   Empacotador. Junta src/*.js num único <script> dentro de dist/neon-arena.html.
 
   Não é um bundler de verdade: como todos os módulos viram um escopo só, ele
@@ -55,6 +55,24 @@ foreach ($name in $order) {
 }
 
 $body = $chunks -join "`n"
+
+# Guarda contra a armadilha desta abordagem: juntar os módulos num escopo só faz
+# dois "let X" em arquivos diferentes virarem SyntaxError, e o jogo inteiro morre
+# antes da primeira linha rodar. Melhor quebrar o build aqui do que no navegador.
+$declared = @{}
+$duplicates = @()
+foreach ($line in ($body -split "`n")) {
+  if ($line -match '^(let|const|var|function)\s+([A-Za-z_$][A-Za-z0-9_$]*)') {
+    $name = $matches[2]
+    if ($declared.ContainsKey($name)) { $duplicates += $name }
+    else { $declared[$name] = $true }
+  }
+}
+if ($duplicates.Count -gt 0) {
+  $list = ($duplicates | Sort-Object -Unique) -join ', '
+  throw "nome declarado duas vezes no escopo do pacote: $list — renomeie ou torne local"
+}
+
 $bundle = "<script>`n(function(){`n`"use strict`";`n`n$body`n`n})();`n</script>"
 
 $html = Get-Content (Join-Path $root 'index.html') -Raw

@@ -3,7 +3,7 @@
    -----------------------------------------------------------------------
    Nada aqui depende do jogo: é a camada de renderização crua.
    ======================================================================= */
-import { $, M4, IDENT3, normalMat3 } from "./utils.js";
+import { $, TAU, M4, IDENT3, normalMat3 } from "./utils.js";
 
 export let canvas = null;   // <canvas> do jogo
 export let gl     = null;   // contexto WebGL2
@@ -190,7 +190,6 @@ function drawBox(x,y,z, sx,sy,sz, color, emissive, alpha){
   draw(MESH.box, M4.mul(M4.trans(x,y,z), M4.scale(sx,sy,sz)), color, emissive, alpha, 0, true);
 }
 
-let W = 0, H = 0;
 function resize(){
   const dpr = Math.min(devicePixelRatio || 1, 2);
   W = Math.floor(innerWidth * dpr);

@@ -8,13 +8,14 @@ import { G, bindStart } from "./game-state.js";
 import { updatePlayer, updateEnemies, updateBolts, updateFx, updateWaves } from "./update.js";
 import { updateHud, elFps } from "./hud.js";
 import { render } from "./render.js";
-import "./input.js";           // só registra os listeners
+import { initInput } from "./input.js";
 
 if (!initGL()){
   $("#panelBody").style.display = "none";
   $("#err").style.display = "block";
   $("#err").innerHTML = "<b>Seu navegador não tem WebGL2.</b><br>Abra no Chrome, Edge ou Firefox atualizado.";
 } else {
+  initInput();
   bindStart();
   requestAnimationFrame(frame);
 }
