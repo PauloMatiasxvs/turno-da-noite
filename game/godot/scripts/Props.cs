@@ -77,14 +77,22 @@ namespace TurnoDaNoite.Jogo
         /// </summary>
         public static Node3D Criar(Peca peca, Vector3 tamanho, Material fallback)
         {
+            // O visual vai SEMPRE dentro de um nó pai vazio. Sem esse invólucro,
+            // quem chama define .Position e apaga o deslocamento que apoia a peça
+            // no chão — foi assim que as paredes nasceram com o centro na altura 0
+            // e o jogador passou a enxergar por cima de todas elas.
+            var recipiente = new Node3D();
+
             var cena = Carregar(peca);
             if (cena != null)
             {
                 var no = cena.Instantiate<Node3D>();
                 EncaixarNoTamanho(no, tamanho);
-                return no;
+                recipiente.AddChild(no);
             }
-            return Primitiva(peca, tamanho, fallback);
+            else recipiente.AddChild(Primitiva(peca, tamanho, fallback));
+
+            return recipiente;
         }
 
         /// <summary>

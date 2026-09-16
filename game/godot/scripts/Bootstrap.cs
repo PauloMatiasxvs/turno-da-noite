@@ -19,6 +19,10 @@ namespace TurnoDaNoite.Jogo
         Hud _hud;
         Node3D _raizItens, _raizArmarios;
         Node3D _criatura;
+        AnimationPlayer _animCriatura;
+        string _clipeAtual = "";
+        /// <summary>Se o modelo do artista olha para +Z em vez de -Z, isto vira Pi.</summary>
+        const float GiroDoModelo = Mathf.Pi;
 
         readonly List<Node3D> _fusiveis = new();
         readonly List<Node3D> _baterias = new();
@@ -34,10 +38,31 @@ namespace TurnoDaNoite.Jogo
         bool _autoTeste;
         int _quadrosDeTeste;
 
+        // modo de captura: roda alguns segundos e salva um PNG, para dar para
+        // conferir o visual sem precisar sentar e jogar
+        bool _tirarFoto;
+        int _quadrosDeFoto;
+        // modo de diagnostico: fundo berrante e luz forte, para separar
+        // "nao ha geometria" de "ha geometria sem luz"
+        bool _diagnostico;
+        bool _semSombra;
+        bool _forcarLuz;
+        bool _semNevoa;
+        bool _semAmbiente;
+
         public override void _Ready()
         {
             foreach (string arg in OS.GetCmdlineUserArgs())
+            {
                 if (arg == "--selftest") _autoTeste = true;
+                if (arg == "--screenshot") _tirarFoto = true;
+                if (arg == "--diag") _diagnostico = true;
+                if (arg == "--semsombra") _semSombra = true;
+                if (arg == "--forcaluz") _forcarLuz = true;
+                if (arg == "--semnevoa") _semNevoa = true;
+                if (arg == "--semnormal") SemNormal = true;
+                if (arg == "--semambiente") _semAmbiente = true;
+            }
 
             Opcoes.Carregar();
             CriarMateriais();
@@ -78,8 +103,10 @@ namespace TurnoDaNoite.Jogo
                 Roughness = 0.5f
             };
 
-            _matParede = Fosco(new Color(0.26f, 0.25f, 0.23f));
-            _matPiso = Fosco(new Color(0.19f, 0.18f, 0.17f), 0.95f);
+            _matParede = Texturizado("parede", new Color(0.55f, 0.53f, 0.50f), 0.28f)
+                         ?? Fosco(new Color(0.26f, 0.25f, 0.23f));
+            _matPiso = Texturizado("piso", new Color(0.52f, 0.51f, 0.49f), 0.22f)
+                       ?? Fosco(new Color(0.19f, 0.18f, 0.17f), 0.95f);
             _matTeto = Fosco(new Color(0.13f, 0.13f, 0.14f));
             _matArmario = Fosco(new Color(0.22f, 0.24f, 0.26f), 0.6f);
             _matQuadro = Fosco(new Color(0.30f, 0.26f, 0.18f), 0.7f);
@@ -87,6 +114,51 @@ namespace TurnoDaNoite.Jogo
             _matFusivel = Brilho(new Color(1f, 0.72f, 0.20f), 1.8f);
             _matBateria = Brilho(new Color(0.35f, 0.9f, 0.55f), 1.4f);
             _matPortao = Fosco(new Color(0.24f, 0.11f, 0.11f), 0.8f);
+        }
+
+        /// <summary>
+        /// Monta um material PBR a partir das texturas em assets/texturas, ou
+        /// devolve null se elas não estiverem lá — aí quem chama usa cor chapada.
+        ///
+        /// Usa projeção triplanar de propósito: as paredes são caixas geradas em
+        /// tamanhos diferentes e não têm coordenadas de textura. Triplanar projeta
+        /// do espaço do mundo, então a textura fica no tamanho certo em qualquer
+        /// parede sem ninguém precisar abrir UV no Blender.
+        /// </summary>
+        /// <summary>Desliga o mapa de normal, para testar se ele esta quebrando a luz.</summary>
+        public static bool SemNormal;
+
+        static StandardMaterial3D Texturizado(string nome, Color tinta, float escala)
+        {
+            string cor = $"res://assets/texturas/{nome}_cor.jpg";
+            if (!ResourceLoader.Exists(cor)) return null;
+
+            var mat = new StandardMaterial3D
+            {
+                AlbedoTexture = GD.Load<Texture2D>(cor),
+                AlbedoColor = tinta,
+                Uv1Triplanar = true,
+                Uv1Scale = new Vector3(escala, escala, escala),
+                Roughness = 1f,
+                Metallic = 0f
+            };
+
+            string normal = "res://assets/texturas/" + nome + "_normal.jpg";
+            if (!SemNormal && ResourceLoader.Exists(normal))
+            {
+                mat.NormalEnabled = true;
+                mat.NormalTexture = GD.Load<Texture2D>(normal);
+                mat.NormalScale = 1.2f;   // realça o relevo: no escuro é o que dá textura à parede
+            }
+
+            string aspereza = $"res://assets/texturas/{nome}_aspereza.jpg";
+            if (ResourceLoader.Exists(aspereza))
+            {
+                mat.RoughnessTexture = GD.Load<Texture2D>(aspereza);
+                mat.RoughnessTextureChannel = BaseMaterial3D.TextureChannel.Red;
+            }
+
+            return mat;
         }
 
         void MontarAmbiente()
@@ -97,18 +169,31 @@ namespace TurnoDaNoite.Jogo
                 BackgroundColor = new Color(0.004f, 0.005f, 0.009f),
                 AmbientLightSource = Godot.Environment.AmbientSource.Color,
                 AmbientLightColor = new Color(0.10f, 0.11f, 0.15f),
-                AmbientLightEnergy = 0.10f,       // quase nada: é o que faz o escuro ser escuro
+                AmbientLightEnergy = 0.22f,       // quase nada, mas o suficiente para ler a silhueta
                 FogEnabled = true,
-                FogLightColor = new Color(0.02f, 0.02f, 0.03f),
-                FogDensity = 0.035f,
+                FogLightColor = new Color(0.03f, 0.032f, 0.045f),
+                FogDensity = 0.008f,
                 GlowEnabled = true,
-                GlowIntensity = 0.5f,
-                TonemapMode = Godot.Environment.ToneMapper.Aces,
-                AdjustmentEnabled = true,
-                AdjustmentContrast = 1.12f,
-                AdjustmentSaturation = 0.82f
+                GlowIntensity = 0.35f,
+
+                // Calibrado com captura de tela. A combinação anterior — ACES com
+                // exposição 1 mais AdjustmentContrast/Saturation ligados — comia
+                // praticamente toda a luz da lanterna: a cena ficava preta mesmo
+                // com energia 500 no holofote. Exposição acima de 1 e ajustes
+                // desligados devolvem a imagem.
+                TonemapMode = Godot.Environment.ToneMapper.Filmic,
+                TonemapExposure = 1.8f,
+                AdjustmentEnabled = false
             };
-            AddChild(new WorldEnvironment { Environment = env });
+            if (_semNevoa) env.FogEnabled = false;
+            if (_diagnostico)
+            {
+                env.BackgroundColor = new Color(1f, 0f, 1f);
+                env.AmbientLightColor = new Color(1f, 1f, 1f);
+                env.AmbientLightEnergy = 0.0f;   // so a lanterna ilumina
+                env.FogEnabled = false;
+            }
+            if (!_semAmbiente) AddChild(new WorldEnvironment { Environment = env });
 
             _camera = new Camera3D { Fov = 74, Current = true, Near = 0.04f, Far = 200f };
             AddChild(_camera);
@@ -117,12 +202,17 @@ namespace TurnoDaNoite.Jogo
             _lanterna = new SpotLight3D
             {
                 LightColor = new Color(1f, 0.93f, 0.78f),
-                LightEnergy = 6.5f,
-                SpotRange = 34f,
-                SpotAngle = 26f,
-                SpotAngleAttenuation = 0.9f,
-                SpotAttenuation = 1.1f,
-                ShadowEnabled = true
+                // Calibrado olhando captura de tela: com energia 9 a luz morria em
+                // dois metros. Em Godot a queda do holofote e agressiva, entao o
+                // valor util fica bem acima do que a intuicao sugere.
+                LightEnergy = 32f,
+                SpotRange = 30f,
+                SpotAngle = 34f,
+                SpotAngleAttenuation = 1.4f,
+                SpotAttenuation = 0.55f,
+                ShadowEnabled = !_semSombra,
+                ShadowBias = 0.06f,
+                ShadowNormalBias = 2.0f
             };
             _camera.AddChild(_lanterna);
 
@@ -130,8 +220,8 @@ namespace TurnoDaNoite.Jogo
             _lampiao = new OmniLight3D
             {
                 LightColor = new Color(0.35f, 0.40f, 0.55f),
-                LightEnergy = 0.35f,
-                OmniRange = 5f,
+                LightEnergy = 1.6f,
+                OmniRange = 6f,
                 ShadowEnabled = false
             };
             _camera.AddChild(_lampiao);
@@ -225,6 +315,32 @@ namespace TurnoDaNoite.Jogo
 
             _criatura = Props.Criar(Peca.Criatura, new Vector3(0.7f, 2.35f, 0.5f), _matCriatura);
             AddChild(_criatura);
+            _animCriatura = AcharAnimador(_criatura);
+        }
+
+        /// <summary>
+        /// Procura o AnimationPlayer que veio dentro do modelo importado.
+        /// Quando a peça ainda é primitiva não existe nenhum, e o jogo segue
+        /// rodando com a criatura deslizando — feio, mas não quebra.
+        /// </summary>
+        static AnimationPlayer AcharAnimador(Node raiz)
+        {
+            if (raiz is AnimationPlayer ap) return ap;
+            foreach (var filho in raiz.GetChildren())
+            {
+                var achado = AcharAnimador(filho);
+                if (achado != null) return achado;
+            }
+            return null;
+        }
+
+        /// <summary>Toca a animação só quando ela muda, senão reinicia a cada quadro.</summary>
+        void Animar(string clipe)
+        {
+            if (_animCriatura == null || _clipeAtual == clipe) return;
+            if (!_animCriatura.HasAnimation(clipe)) return;
+            _animCriatura.Play(clipe, 0.25f);   // 0,25 s de transição entre estados
+            _clipeAtual = clipe;
         }
 
         // ------------------------------------------------------------- entrada
@@ -293,6 +409,39 @@ namespace TurnoDaNoite.Jogo
 
             if (_autoTeste) { AutoTeste(); return; }
 
+            if (_tirarFoto)
+            {
+                // deixa a partida andar um pouco para a criatura sair do lugar,
+                // e gira a câmera devagar para não fotografar sempre a mesma parede
+                _partida.Passo(1f / 60f, new Comando());
+                _giro += dt * 0.35f;
+                _inclinacao = -0.14f;   // olha um pouco para baixo: mostra chao e parede
+                _quadrosDeFoto++;
+                SincronizarCamera(dt);
+                SincronizarItens(dt);
+                SincronizarCriatura(dt);
+                _hud.Atualizar(_partida);
+
+                if (_quadrosDeFoto == 148)
+                {
+                    var predio = GetNodeOrNull<Node3D>("Predio");
+                    GD.Print("camera em " + _camera.GlobalPosition + ", lanterna visivel=" + _lanterna.Visible + " energia=" + _lanterna.LightEnergy);
+                    GD.Print("lanterna global=" + _lanterna.GlobalPosition + " frente=" + (-_lanterna.GlobalTransform.Basis.Z));
+                    GD.Print("camera frente=" + (-_camera.GlobalTransform.Basis.Z) + " rot=" + _camera.Rotation);
+                    if (_forcarLuz) _lanterna.LightEnergy = 500f;
+                    GD.Print($"filhos do predio: {predio?.GetChildCount()}");
+                    if (predio != null)
+                        for (int i = 1; i < Mathf.Min(5, predio.GetChildCount()); i++)
+                            if (predio.GetChild(i) is Node3D nd)
+                                GD.Print($"  peca {i}: {nd.Name} em {nd.GlobalPosition}, visivel={nd.Visible}");
+                    GD.Print($"material parede: albedo={_matParede.AlbedoColor} textura={(_matParede.AlbedoTexture != null ? "sim" : "nao")}");
+                }
+                if (_quadrosDeFoto == 150) TirarFoto("res://captura_1.png");
+                if (_quadrosDeFoto == 330) TirarFoto("res://captura_2.png");
+                if (_quadrosDeFoto >= 340) GetTree().Quit();
+                return;
+            }
+
             if (_partida.Fase == Fase.Jogando)
             {
                 _partida.Passo(dt, LerComando());
@@ -319,7 +468,7 @@ namespace TurnoDaNoite.Jogo
 
             _lanterna.Visible = j.LuzAcesa;
             // a luz fraqueja junto com a bateria: avisa antes de apagar
-            _lanterna.LightEnergy = 6.5f * Mathf.Clamp(j.Bateria * 3f, 0.25f, 1f);
+            if (!_forcarLuz) _lanterna.LightEnergy = 32f * Mathf.Clamp(j.Bateria * 3f, 0.25f, 1f);
             _camera.Fov = j.Correndo ? 80 : 74;
         }
 
@@ -349,9 +498,23 @@ namespace TurnoDaNoite.Jogo
             var ela = _partida.Ela;
             _criatura.Position = new Vector3(ela.Pos.X, 0, ela.Pos.Z);
             var dir = ela.Direcao;
-            _criatura.Rotation = new Vector3(0, Mathf.Atan2(dir.X, dir.Z), 0);
+            _criatura.Rotation = new Vector3(0, Mathf.Atan2(dir.X, dir.Z) + GiroDoModelo, 0);
+
+            // a animacao segue o estado: parada, andando ou correndo atras de voce
+            float ritmo = ela.Velocidade.Comprimento;
+            Animar(ela.Estado == EstadoCriatura.Caca || ritmo > 4f ? "Run"
+                 : ritmo > 0.4f ? "Walk"
+                 : "Idle");
             // só existe quando está por perto: economiza e evita vê-la de longe sem querer
             _criatura.Visible = P2.Distancia(ela.Pos, _partida.Jogador.Pos) < 45f;
+        }
+
+        void TirarFoto(string caminho)
+        {
+            var img = GetViewport().GetTexture().GetImage();
+            string real = ProjectSettings.GlobalizePath(caminho);
+            img.SavePng(real);
+            GD.Print($"captura salva: {real}");
         }
 
         // ------------------------------------------------------------- auto-teste
@@ -377,6 +540,10 @@ namespace TurnoDaNoite.Jogo
             Checar("câmera criada", _camera != null);
             Checar("lanterna criada", _lanterna != null);
             Checar("criatura na cena", _criatura != null);
+            Checar(_animCriatura != null
+                ? "animações do modelo: " + string.Join(", ", _animCriatura.GetAnimationList())
+                : "modelo da criatura sem AnimationPlayer (ainda em primitiva?)",
+                _animCriatura != null && _animCriatura.HasAnimation("Walk") && _animCriatura.HasAnimation("Run"));
 
             // roda 20 s de partida sem jogador para ver a simulação andar
             var antes = _partida.Ela.Pos;

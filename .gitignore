@@ -45,3 +45,6 @@ game/godot/.mono/
 game/godot/bin/
 game/godot/obj/
 game/godot/*.sln
+
+# capturas de tela do modo --screenshot
+game/godot/captura_*.png

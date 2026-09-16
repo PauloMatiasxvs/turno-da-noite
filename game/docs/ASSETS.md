@@ -97,3 +97,21 @@ Ordem sugerida, do que mais pesa para o que menos pesa:
 4. **Uma segunda mecânica** além de fusível: uma que mude como você anda pelo
    prédio na segunda metade do jogo
 5. **Build e assinatura** para Windows, e página na loja
+
+## Ferramentas de diagnóstico do projeto Godot
+
+O jogo aceita sinalizadores de linha de comando que existem para depurar o que
+não dá para ver jogando:
+
+```
+godot --headless --path game/godot -- --selftest    # 10 checagens, sai com código 0 ou 1
+godot --path game/godot -- --screenshot             # roda 6 s e salva captura_1.png e captura_2.png
+godot --path game/godot -- --screenshot --diag      # fundo magenta e luz chapada: separa "sem geometria" de "sem luz"
+godot --path game/godot -- --screenshot --semnevoa  # desliga a névoa
+godot --path game/godot -- --screenshot --semnormal # desliga os mapas de normal
+godot --path game/godot -- --screenshot --semambiente # roda sem WorldEnvironment
+```
+
+Foi com esse conjunto que se achou o bug que deixava a tela preta: a combinação
+de tonemap ACES com `AdjustmentContrast`/`AdjustmentSaturation` ligados comia
+toda a luz da lanterna — a cena ficava preta mesmo com energia 500 no holofote.
