@@ -1,0 +1,28 @@
+; Projeto Godot 4 — Neon Arena
+; Gerado à mão de propósito: o projeto inteiro é montado por código em
+; scripts/Bootstrap.cs, então não há cenas complexas para manter.
+
+config_version=5
+
+[application]
+
+config/name="Neon Arena"
+config/description="FPS de arena por ondas. A simulação vive em C# puro e o Godot só renderiza."
+run/main_scene="res://Main.tscn"
+config/features=PackedStringArray("4.4", "C#", "Forward Plus")
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+
+[dotnet]
+
+project/assembly_name="NeonArena"
+
+[rendering]
+
+renderer/rendering_method="forward_plus"
+environment/defaults/default_clear_color=Color(0.035, 0.05, 0.09, 1)
+anti_aliasing/quality/msaa_3d=2

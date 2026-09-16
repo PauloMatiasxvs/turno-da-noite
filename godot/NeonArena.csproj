@@ -1,0 +1,20 @@
+<Project Sdk="Godot.NET.Sdk/4.4.0">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <Nullable>disable</Nullable>
+    <!-- Mesma trava do projeto de testes: C# 9 é o que o Unity aceita, e o
+         núcleo compartilhado precisa compilar nos dois. -->
+    <LangVersion>9.0</LangVersion>
+    <RootNamespace>NeonArena.GodotGame</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Fonte única do jogo: os mesmos arquivos que o Unity e os testes compilam.
+         Ficam sob unity/Assets porque o Unity exige scripts dentro de Assets/;
+         MSBuild não se importa com o caminho. -->
+    <Compile Include="..\unity\Assets\Scripts\Core\**\*.cs" />
+  </ItemGroup>
+
+</Project>
