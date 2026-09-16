@@ -1,22 +1,23 @@
-﻿<#
-  Sobe o repositório para o GitHub.
+<#
+  Sobe o repositorio para o GitHub.
 
-  Roda sozinho pela Tarefa Agendada do Windows ("Neon Arena - push GitHub"),
-  mas você pode executar à mão a qualquer momento:
-      powershell -ExecutionPolicy Bypass -File tools\push-github.ps1
+  Uso:  powershell -ExecutionPolicy Bypass -File tools\push-github.ps1
 
-  Pré-requisito que só você pode fazer: autenticar uma vez com
+  Pre-requisito que so voce pode fazer: autenticar uma vez com
       gh auth login
-  (abre o navegador; escolha GitHub.com -> HTTPS -> autenticar pelo navegador)
-
-  O script não guarda senha nem token: quem cuida disso é o próprio gh.
+  O script nao guarda senha nem token; quem cuida disso e o proprio gh.
 #>
 param(
   [string]$RepoName = 'turno-da-noite',
   [ValidateSet('public', 'private')][string]$Visibility = 'public'
 )
 
-$ErrorActionPreference = 'Stop'
+# 'Continue' de proposito. Com 'Stop', o stderr de um executavel nativo vira
+# erro fatal do PowerShell -- e o gh escreve no stderr so para dizer que o
+# repositorio ainda nao existe, que e justamente a resposta esperada aqui.
+# O controle e feito por $LASTEXITCODE, que e como o gh de fato responde.
+$ErrorActionPreference = 'Continue'
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $logFile = Join-Path $repoRoot 'push-log.txt'
 
@@ -26,70 +27,72 @@ function Log([string]$msg) {
   Add-Content -Path $logFile -Value $line -Encoding utf8
 }
 
-# o gh pode não estar no PATH da sessão que a tarefa agendada cria
+# o gh pode nao estar no PATH da sessao que a tarefa agendada cria
 $gh = 'gh'
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
-  $candidate = 'C:\Program Files\GitHub CLI\gh.exe'
-  if (Test-Path $candidate) { $gh = $candidate }
-  else { Log 'ERRO: gh (GitHub CLI) não encontrado. Instale com: winget install GitHub.cli'; exit 2 }
+  $candidato = 'C:\Program Files\GitHub CLI\gh.exe'
+  if (Test-Path $candidato) { $gh = $candidato }
+  else { Log 'ERRO: gh (GitHub CLI) nao encontrado. Instale com: winget install GitHub.cli'; exit 2 }
 }
 
 Set-Location $repoRoot
 Log "=== push iniciado em $repoRoot ==="
 
-# 1. autenticação — é aqui que para se você ainda não fez login
-& $gh auth status 2>&1 | Out-Null
+# 1. autenticacao
+& $gh auth status 2>$null | Out-Null
 if ($LASTEXITCODE -ne 0) {
-  Log 'PARADO: você ainda não autenticou no GitHub.'
+  Log 'PARADO: voce ainda nao autenticou no GitHub.'
   Log 'Rode uma vez:  gh auth login'
-  Log 'Depois rode este script de novo (ou espere a próxima execução agendada).'
   exit 3
 }
 
 $user = (& $gh api user --jq .login 2>$null)
-if (-not $user) { Log 'ERRO: autenticado, mas não consegui ler o usuário.'; exit 4 }
+if (-not $user) { Log 'ERRO: autenticado, mas nao consegui ler o usuario.'; exit 4 }
 Log "autenticado como $user"
 
-# 2. commit de qualquer coisa pendente
-$dirty = git status --porcelain
-if ($dirty) {
-  Log 'há mudanças não commitadas; criando commit automático'
+# 2. commit do que estiver pendente
+$sujo = git status --porcelain
+if ($sujo) {
+  Log 'ha mudancas nao commitadas; criando commit automatico'
   git add -A
-  git commit -q -m "Ajustes antes do push automático"
+  git commit -q -m "Ajustes antes do push automatico"
 }
 
-# 3. remote: cria o repositório se ainda não existir
-$hasOrigin = (git remote) -contains 'origin'
-if (-not $hasOrigin) {
-  $exists = $false
-  & $gh repo view "$user/$RepoName" 2>&1 | Out-Null
-  if ($LASTEXITCODE -eq 0) { $exists = $true }
+# 3. remote: cria o repositorio se ainda nao existir
+$temOrigin = (git remote) -contains 'origin'
+if (-not $temOrigin) {
+  & $gh repo view "$user/$RepoName" 2>$null | Out-Null
+  $existe = ($LASTEXITCODE -eq 0)
 
-  if ($exists) {
-    Log "repositório $user/$RepoName já existe; apenas ligando o remote"
+  if ($existe) {
+    Log "repositorio $user/$RepoName ja existe; apenas ligando o remote"
     git remote add origin "https://github.com/$user/$RepoName.git"
   } else {
-    Log "criando repositório $Visibility $user/$RepoName"
-    & $gh repo create $RepoName --$Visibility --source=. --remote=origin --disable-wiki
-    if ($LASTEXITCODE -ne 0) { Log 'ERRO ao criar o repositório'; exit 5 }
+    Log "criando repositorio $Visibility $user/$RepoName"
+    if ($Visibility -eq 'public') {
+      & $gh repo create $RepoName --public --source=. --remote=origin --disable-wiki
+    } else {
+      & $gh repo create $RepoName --private --source=. --remote=origin --disable-wiki
+    }
+    if ($LASTEXITCODE -ne 0) { Log 'ERRO ao criar o repositorio'; exit 5 }
   }
 }
 
 # 4. push
 Log 'enviando branch main'
-git push -u origin main 2>&1 | ForEach-Object { Log "  git: $_" }
+git push -u origin main
 if ($LASTEXITCODE -ne 0) { Log 'ERRO no push'; exit 6 }
 
 $url = "https://github.com/$user/$RepoName"
 Log "PRONTO: $url"
 
-# 5. GitHub Pages para jogar direto pelo navegador (só se for público)
+# 5. GitHub Pages, para jogar direto pelo navegador (so se for publico)
 if ($Visibility -eq 'public') {
-  & $gh api -X POST "repos/$user/$RepoName/pages" -f "source[branch]=main" -f "source[path]=/" 2>&1 | Out-Null
+  & $gh api -X POST "repos/$user/$RepoName/pages" -f "source[branch]=main" -f "source[path]=/" 2>$null | Out-Null
   if ($LASTEXITCODE -eq 0) {
     Log "Pages ligado: https://$user.github.io/$RepoName/horror/turno-da-noite.html"
   } else {
-    Log 'Pages não foi ligado automaticamente (dá para ligar em Settings > Pages).'
+    Log 'Pages nao foi ligado automaticamente (da para ligar em Settings > Pages).'
   }
 }
 
