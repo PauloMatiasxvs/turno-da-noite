@@ -38,3 +38,10 @@ Thumbs.db
 desktop.ini
 .DS_Store
 push-log.txt
+
+# ---- Godot do jogo de terror ----
+game/godot/.godot/
+game/godot/.mono/
+game/godot/bin/
+game/godot/obj/
+game/godot/*.sln
