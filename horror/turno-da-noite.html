@@ -129,6 +129,7 @@ button:focus-visible{outline:1px solid var(--ambar);outline-offset:4px}
         <div><kbd>E</kbd>pegar / usar</div>
         <div><kbd>Ctrl</kbd>agachar — silencioso</div>
         <div><kbd>Espaço</kbd>prender a respiração</div>
+        <div><kbd>- =</kbd>sensibilidade do mouse</div>
         <div><kbd>Esc</kbd>pausar</div>
         <div><kbd>M</kbd>mudo</div>
       </div>
@@ -1076,7 +1077,10 @@ function vencer(){
    ============================================================ */
 const teclas = {};
 let semTrava = false, miraX = 0, miraY = 0, temMira = false;
-const SENS = .0021;
+// Sensibilidade: o padrao estava alto demais. Ajustavel com - e =, guardada
+// entre partidas. Mira de terror pede mao mais lenta que a de tiro.
+let SENS = 0.0011;
+try { const s = parseFloat(localStorage.getItem("tdn_sens")); if (s > 0) SENS = s; } catch(e){}
 
 addEventListener("keydown", e => {
   if (e.code === "Escape") return;
@@ -1086,6 +1090,8 @@ addEventListener("keydown", e => {
   if (estado !== "jogando") return;
   if (e.code === "KeyF") alternarLanterna();
   if (e.code === "KeyE") interagir();
+  if (e.code === "Minus" || e.code === "NumpadSubtract") ajustarSens(-1);
+  if (e.code === "Equal" || e.code === "NumpadAdd") ajustarSens(1);
   if (e.code === "KeyM"){
     mudo = !mudo;
     if (mestre) mestre.gain.value = mudo ? 0 : .85;
@@ -1127,6 +1133,12 @@ document.addEventListener("pointerlockerror", () => { semTrava = true; });
 document.addEventListener("pointerlockchange", () => {
   if (!document.pointerLockElement && estado === "jogando" && !semTrava) pausar();
 });
+
+function ajustarSens(dir){
+  SENS = clamp(SENS + dir * 0.00015, 0.0003, 0.004);
+  try { localStorage.setItem("tdn_sens", String(SENS)); } catch(e){}
+  mostrarDica("sensibilidade " + Math.round(SENS/0.0011*100) + "%", 1.4);
+}
 
 function alternarLanterna(){
   if (jogador.bateria <= 0){ SOM.bateria(); mostrarDica("bateria acabou", 1.4); return; }
