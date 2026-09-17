@@ -56,6 +56,8 @@ namespace TurnoDaNoite.Jogo
         bool _forcarLuz;
         bool _semNevoa;
         bool _semAmbiente;
+        // poe a camera na frente do primeiro fusivel, para conferir o modelo de perto
+        bool _verItem;
 
         public override void _Ready()
         {
@@ -69,6 +71,7 @@ namespace TurnoDaNoite.Jogo
                 if (arg == "--semnevoa") _semNevoa = true;
                 if (arg == "--semnormal") SemNormal = true;
                 if (arg == "--semambiente") _semAmbiente = true;
+                if (arg == "--verfusivel") _verItem = true;
             }
 
             Opcoes.Carregar();
@@ -578,7 +581,17 @@ namespace TurnoDaNoite.Jogo
             {
                 // deixa a partida andar um pouco para a criatura sair do lugar,
                 // e gira a câmera devagar para não fotografar sempre a mesma parede
-                if (!_naAbertura) { _partida.Passo(1f / 60f, new Comando()); _giro += dt * 0.35f; }
+                if (!_naAbertura)
+                {
+                    if (_verItem)
+                    {
+                        // encosta no item para julgar o modelo, em vez de adivinhar
+                        var alvo = _partida.Fusiveis[0].Pos;
+                        _partida.Jogador.Pos = new P2(alvo.X, alvo.Z + 0.85f);
+                        _giro = 0; _inclinacao = -0.95f;
+                    }
+                    else { _partida.Passo(1f / 60f, new Comando()); _giro += dt * 0.35f; }
+                }
                 _inclinacao = -0.14f;   // olha um pouco para baixo: mostra chao e parede
                 _quadrosDeFoto++;
                 SincronizarCamera(dt);
@@ -602,8 +615,7 @@ namespace TurnoDaNoite.Jogo
                 }
                 if (_quadrosDeFoto == 150) TirarFoto("res://captura_1.png");
                 // depois da foto do menu, dispensa ele e fotografa o jogo
-                if (_quadrosDeFoto == 160 && _menu != null)
-                    for (int k = 0; k < 6; k++) _menu.Avancar();
+                if (_quadrosDeFoto == 160 && _menu != null) _menu.PularTudo();
                 if (_quadrosDeFoto == 330) TirarFoto("res://captura_2.png");
                 if (_quadrosDeFoto >= 340) GetTree().Quit();
                 return;

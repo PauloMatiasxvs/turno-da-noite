@@ -201,6 +201,13 @@ namespace TurnoDaNoite.Jogo
 
         public bool NaHistoria => _carta >= 0;
 
+        /// <summary>Vai direto ao jogo. Usado pelo modo de captura de tela.</summary>
+        public void PularTudo()
+        {
+            Visible = false;
+            AoComecar?.Invoke();
+        }
+
         public override void _Process(double delta)
         {
             _tempo += (float)delta;

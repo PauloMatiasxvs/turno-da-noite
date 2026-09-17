@@ -138,6 +138,20 @@ namespace TurnoDaNoite.Jogo
         /// <summary>Formas provisórias. Feias de propósito: é para dar vontade de trocar.</summary>
         static Node3D Primitiva(Peca peca, Vector3 tamanho, Material material)
         {
+            // Peças que o jogador olha de perto são montadas com várias formas
+            // em Modelos.cs. Um cubo brilhante lê como cubo brilhante; um
+            // cilindro cerâmico com dois terminais lê como fusível.
+            switch (peca)
+            {
+                case Peca.Fusivel:        return Modelos.Fusivel();
+                case Peca.Bateria:        return Modelos.Bateria();
+                case Peca.Armario:        return Modelos.Armario(tamanho);
+                case Peca.QuadroEletrico: return Modelos.QuadroEletrico(tamanho);
+                case Peca.Portao:         return Modelos.Porta(tamanho);
+                case Peca.Caixote:        return Modelos.Caixote(tamanho);
+                case Peca.Barril:         return Modelos.Barril(tamanho);
+            }
+
             // Peças da mão são cilindros deitados apontando para -Z, que é para
             // onde a câmera olha. Como caixa, a lanterna parecia um tijolo.
             bool naMao = peca is Peca.LanternaNaMao or Peca.Braco;
@@ -171,18 +185,38 @@ namespace TurnoDaNoite.Jogo
             return mi;
         }
 
-        /// <summary>Lista, para a tela de opções, o que ainda falta de arte.</summary>
+        /// <summary>Pecas que tem modelo montado em codigo quando falta arquivo.</summary>
+        static readonly HashSet<Peca> Montadas = new()
+        {
+            Peca.Fusivel, Peca.Bateria, Peca.Armario, Peca.QuadroEletrico,
+            Peca.Portao, Peca.Caixote, Peca.Barril
+        };
+
+        /// <summary>
+        /// O que ainda falta de arte. Separa as duas coisas de proposito: peca
+        /// montada em codigo ja tem forma reconhecivel, peca crua ainda e um
+        /// cubo. Dizer "14 em primitiva" escondia essa diferenca.
+        /// </summary>
         public static string Relatorio()
         {
-            var faltando = new List<string>();
+            var montadas = new List<string>();
+            var cruas = new List<string>();
             foreach (var par in Arquivos)
             {
                 Carregar(par.Key);
-                if (SemModelo.Contains(par.Key)) faltando.Add(par.Value);
+                if (!SemModelo.Contains(par.Key)) continue;
+                (Montadas.Contains(par.Key) ? montadas : cruas).Add(par.Value);
             }
-            return faltando.Count == 0
-                ? "todos os modelos carregados"
-                : $"usando primitiva em {faltando.Count} peças: {string.Join(", ", faltando)}";
+
+            if (montadas.Count == 0 && cruas.Count == 0) return "todos os modelos importados";
+
+            string texto = "";
+            if (montadas.Count > 0)
+                texto += $"montadas em codigo ({montadas.Count}): {string.Join(", ", montadas)}";
+            if (cruas.Count > 0)
+                texto += (texto.Length > 0 ? "\n" : "") +
+                         $"ainda forma crua ({cruas.Count}): {string.Join(", ", cruas)}";
+            return texto;
         }
     }
 }
