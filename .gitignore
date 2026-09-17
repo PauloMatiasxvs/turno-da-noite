@@ -1,4 +1,4 @@
-# ---- .NET / C# ----
+﻿# ---- .NET / C# ----
 bin/
 obj/
 *.user
@@ -6,7 +6,7 @@ obj/
 .vs/
 
 # ---- Godot ----
-# cache de import e binários do editor; o projeto se reconstrói sozinho
+# cache de import e binÃ¡rios do editor; o projeto se reconstrÃ³i sozinho
 godot/.godot/
 godot/.mono/
 godot/bin/
@@ -15,7 +15,7 @@ godot/*.sln
 godot/export_presets.cfg
 
 # ---- Unity ----
-# tudo aqui é gerado pelo editor ao abrir o projeto
+# tudo aqui Ã© gerado pelo editor ao abrir o projeto
 unity/Library/
 unity/Temp/
 unity/Obj/
@@ -44,7 +44,10 @@ game/godot/.godot/
 game/godot/.mono/
 game/godot/bin/
 game/godot/obj/
-game/godot/*.sln
+# game/godot/*.sln NAO entra aqui: o Godot exige a solucao para exportar
 
 # capturas de tela do modo --screenshot
 game/godot/captura_*.png
+
+# executavel exportado (184 MB): nao vai para o git
+dist-jogo/
