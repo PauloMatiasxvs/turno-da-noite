@@ -24,6 +24,17 @@ namespace TurnoDaNoite.Tests
             for (int i = 0; i < passos; i++) p.Passo(1f / 60f, c);
         }
 
+        /// <summary>
+        /// Vai até o ponto e recolhe o que estiver ali. Desde que os itens passaram
+        /// a ficar guardados, pegar algo são dois gestos: abrir e então pegar.
+        /// </summary>
+        public static void Recolher(this Partida p, P2 onde)
+        {
+            p.Jogador.Pos = onde;
+            p.Interagir();      // abre o recipiente
+            p.Interagir();      // pega o que estava dentro
+        }
+
         /// <summary>Anda para a frente (norte).</summary>
         public static Comando Andando(bool correr = false, bool agachar = false) =>
             new Comando { FrenteZ = -1f, Correr = correr, Agachar = agachar };
@@ -290,11 +301,7 @@ namespace TurnoDaNoite.Tests
     {
         static void PegarTodosOsFusiveis(Partida p)
         {
-            foreach (var f in p.Fusiveis)
-            {
-                p.Jogador.Pos = f.Pos;
-                p.Interagir();
-            }
+            foreach (var f in p.Fusiveis) p.Recolher(f.Pos);
         }
 
         [Fact]
@@ -308,8 +315,7 @@ namespace TurnoDaNoite.Tests
         public void PegarFusivelAumentaAMao()
         {
             var p = Ajuda.Nova();
-            p.Jogador.Pos = p.Fusiveis[0].Pos;
-            p.Interagir();
+            p.Recolher(p.Fusiveis[0].Pos);
             Assert.Equal(1, p.Jogador.FusiveisNaMao);
             Assert.True(p.Fusiveis[0].Recolhido);
         }
@@ -378,8 +384,7 @@ namespace TurnoDaNoite.Tests
             var p = Ajuda.Nova();
             p.Rodar(40f);
             float gasta = p.Jogador.Bateria;
-            p.Jogador.Pos = p.Baterias[0].Pos;
-            p.Interagir();
+            p.Recolher(p.Baterias[0].Pos);
             Assert.True(p.Jogador.Bateria > gasta);
             Assert.True(p.Jogador.Bateria <= 1f);
         }

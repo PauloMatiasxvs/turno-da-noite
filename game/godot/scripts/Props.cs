@@ -10,7 +10,9 @@ namespace TurnoDaNoite.Jogo
     {
         Parede, Piso, Teto, Armario, QuadroEletrico, Portao,
         Fusivel, Bateria, Criatura, Luminaria, Caixote, Barril, Cano,
-        LanternaNaMao, Braco
+        Mao,
+        CaixaFerramentas, Gaveteiro, Prateleira,
+        Bancada, Pilha, Entulho
     }
 
     /// <summary>
@@ -43,8 +45,13 @@ namespace TurnoDaNoite.Jogo
             { Peca.Caixote,        "caixote" },
             { Peca.Barril,         "barril" },
             { Peca.Cano,           "cano" },
-            { Peca.LanternaNaMao,  "lanterna_mao" },
-            { Peca.Braco,          "braco" }
+            { Peca.Mao,            "mao_com_lanterna" },
+            { Peca.CaixaFerramentas, "caixa_ferramentas" },
+            { Peca.Gaveteiro,        "gaveteiro" },
+            { Peca.Prateleira,       "prateleira" },
+            { Peca.Bancada,          "bancada" },
+            { Peca.Pilha,            "pilha" },
+            { Peca.Entulho,          "entulho" }
         };
 
         static readonly string[] Extensoes = { ".glb", ".gltf", ".obj", ".fbx", ".tscn" };
@@ -150,19 +157,17 @@ namespace TurnoDaNoite.Jogo
                 case Peca.Portao:         return Modelos.Porta(tamanho);
                 case Peca.Caixote:        return Modelos.Caixote(tamanho);
                 case Peca.Barril:         return Modelos.Barril(tamanho);
+                case Peca.CaixaFerramentas: return Modelos.CaixaFerramentas();
+                case Peca.Gaveteiro:      return Modelos.Gaveteiro();
+                case Peca.Prateleira:     return Modelos.Prateleira();
+                case Peca.Bancada:        return Modelos.Bancada();
+                case Peca.Pilha:          return Modelos.Pilha();
+                case Peca.Entulho:        return Modelos.Entulho();
+                case Peca.Mao:            return Modelos.MaoComLanterna();
             }
-
-            // Peças da mão são cilindros deitados apontando para -Z, que é para
-            // onde a câmera olha. Como caixa, a lanterna parecia um tijolo.
-            bool naMao = peca is Peca.LanternaNaMao or Peca.Braco;
 
             Mesh malha = peca switch
             {
-                Peca.LanternaNaMao or Peca.Braco => new CylinderMesh
-                {
-                    TopRadius = tamanho.X / 2, BottomRadius = tamanho.X / 2,
-                    Height = tamanho.Z, RadialSegments = 12
-                },
                 Peca.Fusivel or Peca.Bateria => new BoxMesh { Size = tamanho },
                 Peca.Barril => new CylinderMesh
                 {
@@ -178,8 +183,7 @@ namespace TurnoDaNoite.Jogo
 
             var mi = new MeshInstance3D { Mesh = malha, MaterialOverride = material };
 
-            if (naMao) mi.RotateX(Mathf.Pi / 2);              // deita o cilindro no eixo Z
-            else if (peca is not (Peca.Piso or Peca.Teto))
+            if (peca is not (Peca.Piso or Peca.Teto))
                 mi.Position = new Vector3(0, tamanho.Y / 2f, 0);
 
             return mi;
@@ -189,7 +193,9 @@ namespace TurnoDaNoite.Jogo
         static readonly HashSet<Peca> Montadas = new()
         {
             Peca.Fusivel, Peca.Bateria, Peca.Armario, Peca.QuadroEletrico,
-            Peca.Portao, Peca.Caixote, Peca.Barril
+            Peca.Portao, Peca.Caixote, Peca.Barril,
+            Peca.CaixaFerramentas, Peca.Gaveteiro, Peca.Prateleira,
+            Peca.Bancada, Peca.Pilha, Peca.Entulho, Peca.Mao
         };
 
         /// <summary>

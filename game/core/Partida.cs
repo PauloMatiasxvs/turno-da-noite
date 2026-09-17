@@ -13,7 +13,7 @@ namespace TurnoDaNoite.Core
         PegouFusivel, PegouBateria, InstalouFusivel, EnergiaVoltou,
         AbriuArmario, FechouArmario, LanternaLigou, LanternaApagou,
         ElaViuVoce, ElaRugiu, ElaArranhou, VocePegou, VoceEscapou, PortaoTrancado,
-        PortaoBateu
+        PortaoBateu, AbriuRecipiente, RecipienteVazio
     }
 
     public struct Comando
@@ -28,6 +28,10 @@ namespace TurnoDaNoite.Core
     {
         public P2 Pos;
         public bool Recolhido;
+        /// <summary>Indice do recipiente que guarda este item, ou -1 se estiver solto.</summary>
+        public int Dentro = -1;
+        /// <summary>So da para pegar depois de abrir o recipiente.</summary>
+        public bool Alcancavel(Partida p) => Dentro < 0 || p.Recipientes[Dentro].Aberto;
     }
 
     public sealed class Armario
@@ -62,6 +66,14 @@ namespace TurnoDaNoite.Core
         public P2? UltimaPista;
         public float Agressao;
 
+        /// <summary>
+        /// Está fechando o cerco: sabe mais ou menos onde você está e vem andando
+        /// até lá. Precisa ser um estado, e não um destino solto — enquanto era só
+        /// um destino, o sorteio de patrulha seguinte o descartava oito segundos
+        /// depois e ela nunca terminava a caminhada. Ficar parado era seguro.
+        /// </summary>
+        public bool Cercando;
+
         public P2 Direcao
         {
             get
@@ -87,6 +99,9 @@ namespace TurnoDaNoite.Core
         public List<Item> Fusiveis { get; } = new();
         public List<Item> Baterias { get; } = new();
         public List<Armario> Armarios { get; } = new();
+        public List<Recipiente> Recipientes { get; } = new();
+        /// <summary>Cenário: caixotes, tambores, bancadas, canos. Só os sólidos empurram.</summary>
+        public List<Adorno> Adornos { get; private set; } = new();
         public P2 Quadro { get; private set; }
         public P2 Portao { get; private set; }
         public bool PortaoAberto { get; private set; }
@@ -124,6 +139,19 @@ namespace TurnoDaNoite.Core
             return false;
         }
 
+        /// <summary>
+        /// Já tem alguma coisa ocupando este ponto? Vale para recipiente, armário
+        /// e também para o quadro e a porta: um armário nascido em cima do quadro
+        /// rouba a interação dele, e aí não há como instalar fusível nenhum — a
+        /// partida fica impossível sem nada na tela explicando o porquê.
+        /// </summary>
+        bool TemAlgoPerto(P2 p, float limite)
+        {
+            foreach (var r in Recipientes) if (P2.Distancia(p, r.Pos) < limite) return true;
+            foreach (var a in Armarios) if (P2.Distancia(p, a.Pos) < limite) return true;
+            return P2.Distancia(p, Quadro) < limite || P2.Distancia(p, Portao) < limite;
+        }
+
         void Distribuir()
         {
             Fusiveis.Clear(); Baterias.Clear(); Armarios.Clear(); Eventos.Clear();
@@ -143,28 +171,82 @@ namespace TurnoDaNoite.Core
             _portaBateu = false;
             Quadro = Predio.ParaMundo(Predio.Sala(TipoSala.Quadro).Centro);
 
-            // um fusível por sala, nunca na portaria nem no quadro
-            var candidatas = new List<Sala>();
+            // Recipientes primeiro: e dentro deles que tudo vai parar. Item
+            // largado no chao brilhando entrega a sala inteira de longe; item
+            // guardado obriga a entrar, revistar e ficar exposto enquanto isso.
+            Recipientes.Clear();
             foreach (var s in Predio.Salas)
-                if (s.Tipo != TipoSala.Portaria && s.Tipo != TipoSala.Quadro && s.Tipo != TipoSala.Patio)
-                    candidatas.Add(s);
-            Embaralhar(candidatas);
+            {
+                if (s.Tipo == TipoSala.Patio) continue;
+                for (int k = 0; k < Regras.RecipientesPorSala; k++)
+                {
+                    // PontoLivre sorteia uma célula qualquer da sala, e sorteio
+                    // repete: dois recipientes saíram no mesmo ponto, um dentro
+                    // do outro, e o de fora escondia o fusível do de dentro para
+                    // sempre. Tenta de novo até achar lugar só dele.
+                    P2? achado = null;
+                    for (int tentativa = 0; tentativa < 24 && achado == null; tentativa++)
+                    {
+                        var candidato = Predio.ParaMundo(Predio.PontoLivre(s, _rng));
+                        if (!TemAlgoPerto(candidato, Regras.EspacoEntreMoveis)) achado = candidato;
+                    }
+                    if (achado == null) continue;
 
-            for (int i = 0; i < Regras.FusiveisNecessarios && i < candidatas.Count; i++)
-                Fusiveis.Add(new Item { Pos = Predio.ParaMundo(Predio.PontoLivre(candidatas[i], _rng)) });
+                    Recipientes.Add(new Recipiente
+                    {
+                        Pos = achado.Value,
+                        Tipo = (TipoRecipiente)_rng.Next(3)
+                    });
+                }
+            }
 
-            var paraBateria = new List<Sala>();
-            foreach (var s in Predio.Salas) if (s.Tipo != TipoSala.Patio) paraBateria.Add(s);
-            Embaralhar(paraBateria);
-            for (int i = 0; i < Regras.BateriasNoMapa && i < paraBateria.Count; i++)
-                Baterias.Add(new Item { Pos = Predio.ParaMundo(Predio.PontoLivre(paraBateria[i], _rng)) });
+            // sorteia quais recipientes guardam o quê; o resto fica vazio
+            var indices = new List<int>();
+            for (int i = 0; i < Recipientes.Count; i++)
+            {
+                // nada na portaria: o primeiro fusivel nao pode estar na entrada
+                if (Predio.SalaEm(Recipientes[i].Pos)?.Tipo == TipoSala.Portaria) continue;
+                indices.Add(i);
+            }
+            Embaralhar(indices);
+
+            int posto = 0;
+            for (int i = 0; i < Regras.FusiveisNecessarios && posto < indices.Count; i++, posto++)
+            {
+                var r = Recipientes[indices[posto]];
+                r.FusivelDentro = Fusiveis.Count;
+                Fusiveis.Add(new Item { Pos = r.Pos, Dentro = indices[posto] });
+            }
+            for (int i = 0; i < Regras.BateriasNoMapa && posto < indices.Count; i++, posto++)
+            {
+                var r = Recipientes[indices[posto]];
+                r.BateriaDentro = Baterias.Count;
+                Baterias.Add(new Item { Pos = r.Pos, Dentro = indices[posto] });
+            }
 
             foreach (var s in Predio.Salas)
             {
                 if (s.Tipo == TipoSala.Portaria || s.Tipo == TipoSala.Patio) continue;
                 for (int k = 0; k < Regras.ArmariosPorSala; k++)
-                    Armarios.Add(new Armario { Pos = Predio.ParaMundo(Predio.PontoLivre(s, _rng, 0)) });
+                {
+                    P2? achado = null;
+                    for (int tentativa = 0; tentativa < 24 && achado == null; tentativa++)
+                    {
+                        var candidato = Predio.ParaMundo(Predio.PontoLivre(s, _rng, 0));
+                        if (!TemAlgoPerto(candidato, Regras.EspacoEntreMoveis)) achado = candidato;
+                    }
+                    if (achado != null) Armarios.Add(new Armario { Pos = achado.Value });
+                }
             }
+
+            // Cenário por último: ele precisa saber o que já está no chão para
+            // não nascer em cima de um gaveteiro nem entupir uma passagem.
+            var tomados = new List<P2>();
+            foreach (var r in Recipientes) tomados.Add(r.Pos);
+            foreach (var a in Armarios) tomados.Add(a.Pos);
+            tomados.Add(Quadro);
+            tomados.Add(Portao);
+            Adornos = Cenario.Montar(Predio, _rng, tomados);
 
             Ela.Pos = Predio.ParaMundo(Predio.Sala(TipoSala.Camara).Centro);
             Ela.Estado = EstadoCriatura.Patrulha;
@@ -174,6 +256,7 @@ namespace TurnoDaNoite.Core
             Ela.UltimaPista = null;
             Ela.Agressao = 0;
             Ela.SemPista = 0;
+            Ela.Cercando = false;
             Ela.Velocidade = default;
         }
 
@@ -195,6 +278,10 @@ namespace TurnoDaNoite.Core
             for (int i = 0; i < Fusiveis.Count; i++)
                 if (!Predio.Alcancavel(inicio, Predio.ParaCelula(Fusiveis[i].Pos)))
                     falhas.Add($"fusível {i + 1}");
+
+            for (int i = 0; i < Recipientes.Count; i++)
+                if (!Predio.Alcancavel(inicio, Predio.ParaCelula(Recipientes[i].Pos)))
+                    falhas.Add($"recipiente {i + 1}");
 
             if (!Predio.Alcancavel(inicio, Predio.ParaCelula(Quadro))) falhas.Add("quadro");
             if (!Predio.Alcancavel(inicio, Predio.ParaCelula(Ela.Pos))) falhas.Add("criatura");
@@ -263,11 +350,22 @@ namespace TurnoDaNoite.Core
             {
                 Jogador.Pos += mov.Normalizado * (vel * dt);
                 Jogador.Pos = Predio.EmpurrarFora(Jogador.Pos, Regras.RaioJogador);
+                Jogador.Pos = Cenario.Empurrar(Jogador.Pos, Regras.RaioJogador, Adornos);
+                // a parede tem a última palavra: adorno encostado nela não pode
+                // ser a coisa que te empurra para dentro do concreto
+                Jogador.Pos = Predio.EmpurrarFora(Jogador.Pos, Regras.RaioJogador);
 
                 _tempoPasso -= dt * vel;
                 if (_tempoPasso <= 0)
                 {
-                    _tempoPasso = Jogador.Correndo ? 3.4f : (Jogador.Agachado ? 5.5f : 4.2f);
+                    // Distância entre passadas, em metros. Antes era 4,2 andando:
+                    // a 3,25 m/s isso dá uma passada a cada 1,3 s, que é o ritmo
+                    // de quem passeia, não de quem anda. Soava errado antes mesmo
+                    // de o som tocar. Agora é o comprimento de passada de gente:
+                    // ~0,6 m andando, mais curta correndo, mais longa agachado.
+                    _tempoPasso = Jogador.Correndo
+                        ? Regras.PassadaCorrendo
+                        : (Jogador.Agachado ? Regras.PassadaAgachado : Regras.PassadaAndando);
                     Eventos.Add(Evento.Passo);
                     FazerBarulho(Jogador.Correndo ? Regras.RuidoCorrendo
                                : Jogador.Agachado ? Regras.RuidoAgachado : Regras.RuidoAndando);
@@ -306,7 +404,7 @@ namespace TurnoDaNoite.Core
 
         // ------------------------------------------------------------- interação
 
-        public enum Alvo { Nenhum, Fusivel, Bateria, Armario, Quadro, Portao }
+        public enum Alvo { Nenhum, Fusivel, Bateria, Armario, Quadro, Portao, Recipiente }
 
         public Alvo AlvoMaisPerto(out object objeto)
         {
@@ -314,10 +412,15 @@ namespace TurnoDaNoite.Core
             var melhor = Alvo.Nenhum;
             float md = Regras.RaioInteracao;
 
+            // itens só entram na conta depois que o recipiente foi aberto
             foreach (var f in Fusiveis)
-                if (!f.Recolhido) { float d = P2.Distancia(f.Pos, Jogador.Pos); if (d < md) { md = d; melhor = Alvo.Fusivel; objeto = f; } }
+                if (!f.Recolhido && f.Alcancavel(this))
+                { float d = P2.Distancia(f.Pos, Jogador.Pos); if (d < md) { md = d; melhor = Alvo.Fusivel; objeto = f; } }
             foreach (var b in Baterias)
-                if (!b.Recolhido) { float d = P2.Distancia(b.Pos, Jogador.Pos); if (d < md) { md = d; melhor = Alvo.Bateria; objeto = b; } }
+                if (!b.Recolhido && b.Alcancavel(this))
+                { float d = P2.Distancia(b.Pos, Jogador.Pos); if (d < md) { md = d; melhor = Alvo.Bateria; objeto = b; } }
+            foreach (var r in Recipientes)
+                if (!r.Aberto) { float d = P2.Distancia(r.Pos, Jogador.Pos); if (d < md) { md = d; melhor = Alvo.Recipiente; objeto = r; } }
             foreach (var a in Armarios)
             { float d = P2.Distancia(a.Pos, Jogador.Pos); if (d < md) { md = d; melhor = Alvo.Armario; objeto = a; } }
 
@@ -362,6 +465,14 @@ namespace TurnoDaNoite.Core
                     ((Item)obj).Recolhido = true;
                     Jogador.Bateria = Math.Min(1, Jogador.Bateria + Regras.BateriaPorPilha);
                     Eventos.Add(Evento.PegouBateria);
+                    break;
+
+                case Alvo.Recipiente:
+                    var rec = (Recipiente)obj;
+                    rec.Aberto = true;
+                    Eventos.Add(rec.TemAlgo ? Evento.AbriuRecipiente : Evento.RecipienteVazio);
+                    // revistar faz barulho: e o preco de procurar
+                    FazerBarulho(Regras.RuidoRevistar);
                     break;
 
                 case Alvo.Armario:
@@ -481,6 +592,16 @@ namespace TurnoDaNoite.Core
 
             Ela.SemPista = Ela.Estado == EstadoCriatura.Patrulha ? Ela.SemPista + dt : 0f;
 
+            // O cerco acaba de dois jeitos: uma pista de verdade, que vale mais
+            // que o palpite, ou ela chegando onde achava que você estava. Se
+            // chegou e você não estava lá, volta a patrulhar do zero.
+            if (Ela.Cercando &&
+                (Ela.Estado != EstadoCriatura.Patrulha || distJ < Regras.RaioCerco))
+            {
+                Ela.Cercando = false;
+                Ela.SemPista = 0f;
+            }
+
             EscolherDestino(dt);
             Mover(dt, distJ);
             Sons(dt, distJ);
@@ -520,16 +641,18 @@ namespace TurnoDaNoite.Core
                     if (!Predio.EhParede(perto)) destino = perto;
                 }
             }
-            else if (Ela.SemPista > Regras.SegundosSemPistaAteApertar)
+            else if (Ela.Cercando || Ela.SemPista > Regras.SegundosSemPistaAteApertar)
             {
                 // Faz tempo demais sem pista: ela começa a fechar o cerco. Não é mira
-                // perfeita — é pressão, para o jogo não virar passeio.
+                // perfeita — é pressão, para o jogo não virar passeio. E uma vez
+                // começado ela vai até o fim: some o cerco antes de chegar e ficar
+                // parado num canto vira a jogada mais segura do jogo.
+                Ela.Cercando = true;
                 var alvo = Predio.ParaCelula(Jogador.Pos);
                 var perto = new Celula(
                     Math.Clamp(alvo.Cx + _rng.Next(-4, 5), 1, Predio.Largura - 2),
                     Math.Clamp(alvo.Cz + _rng.Next(-4, 5), 1, Predio.Profundidade - 2));
                 destino = Predio.EhParede(perto) ? alvo : perto;
-                Ela.SemPista = 8f;
             }
             else
             {

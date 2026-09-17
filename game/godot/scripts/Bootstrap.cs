@@ -28,8 +28,29 @@ namespace TurnoDaNoite.Jogo
         /// <summary>Se o modelo do artista olha para +Z em vez de -Z, isto vira Pi.</summary>
         const float GiroDoModelo = Mathf.Pi;
 
+        /// <summary>
+        /// Força do facho com a bateria cheia. Fica numa constante só porque já
+        /// esteve em dois lugares: o valor calibrado aqui era 6,5 e a linha que
+        /// roda todo quadro reescrevia 32 por cima, desfazendo a calibração e
+        /// estourando o chão de branco a cada passo.
+        /// </summary>
+        const float EnergiaDaLanterna = 7.5f;
+
         readonly List<Node3D> _fusiveis = new();
         readonly List<Node3D> _baterias = new();
+
+        /// <summary>
+        /// Um recipiente na cena. Guardo a peça móvel separada porque abrir tem
+        /// de ser visível de longe: sem isso você revista o mesmo gaveteiro três
+        /// vezes sem notar, e o mapa vira um labirinto de móveis iguais.
+        /// </summary>
+        sealed class NoRecipiente
+        {
+            public Node3D Raiz, Tampa;
+            public TipoRecipiente Tipo;
+            public float Abertura;      // 0 fechado, 1 escancarado
+        }
+        readonly List<NoRecipiente> _recipientes = new();
 
         StandardMaterial3D _matParede, _matPiso, _matTeto, _matArmario,
                            _matQuadro, _matFusivel, _matBateria, _matCriatura, _matPortao;
@@ -58,6 +79,9 @@ namespace TurnoDaNoite.Jogo
         bool _semAmbiente;
         // poe a camera na frente do primeiro fusivel, para conferir o modelo de perto
         bool _verItem;
+        // encosta no recipiente que guarda o primeiro fusivel e abre ele no meio
+        // da captura: a segunda foto mostra o estado aberto, que e o que interessa
+        bool _verRecipiente;
 
         public override void _Ready()
         {
@@ -72,6 +96,7 @@ namespace TurnoDaNoite.Jogo
                 if (arg == "--semnormal") SemNormal = true;
                 if (arg == "--semambiente") _semAmbiente = true;
                 if (arg == "--verfusivel") _verItem = true;
+                if (arg == "--verrecipiente") _verRecipiente = true;
             }
 
             Opcoes.Carregar();
@@ -229,11 +254,13 @@ namespace TurnoDaNoite.Jogo
                 // Recalibrado depois que o Environment parou de comer a luz: com 32
                 // o facho virava um circulo branco estourado. Cone mais aberto e
                 // com borda macia parece lanterna, e nao holofote de estadio.
-                LightEnergy = 6.5f,
+                LightEnergy = EnergiaDaLanterna,
                 SpotRange = 26f,
                 SpotAngle = 43f,
                 SpotAngleAttenuation = 2.4f,
-                SpotAttenuation = 1.1f,
+                // queda mais macia: com 1.1 o chao a um metro estourava branco
+                // enquanto a parede do fundo sumia. 0.75 espalha o facho.
+                SpotAttenuation = 0.75f,
                 ShadowEnabled = !_semSombra,
                 ShadowBias = 0.06f,
                 ShadowNormalBias = 2.0f
@@ -267,40 +294,15 @@ namespace TurnoDaNoite.Jogo
             _camera.AddChild(_mao);
             _mao.Position = new Vector3(0.21f, -0.17f, -0.46f);
 
-            var metal = new StandardMaterial3D
-            {
-                AlbedoColor = new Color(0.16f, 0.16f, 0.18f),
-                Metallic = 0.7f, Roughness = 0.35f
-            };
-            var pele = new StandardMaterial3D
-            {
-                // manga escura de uniforme. Antes era 0.30,0.22,0.17 e sob a lanterna
-                // acendia rosa, parecendo uma tabua de madeira no canto da tela.
-                AlbedoColor = new Color(0.10f, 0.10f, 0.12f),
-                Roughness = 0.95f
-            };
-
-            var corpo = Props.Criar(Peca.LanternaNaMao, new Vector3(0.06f, 0.06f, 0.22f), metal);
-            corpo.Name = "Lanterna";
-            _mao.AddChild(corpo);
-
-            var braco = Props.Criar(Peca.Braco, new Vector3(0.065f, 0.065f, 0.26f), pele);
-            braco.Name = "Braco";
-            braco.Position = new Vector3(0.035f, -0.075f, 0.15f);
-            braco.RotateX(Mathf.DegToRad(-12));
-            _mao.AddChild(braco);
+            // A mão inteira é uma peça só, montada em Modelos: dedos em volta do
+            // tubo, cabeça cônica e manga. Antes eram dois cilindros soltos, e
+            // o braço lia como um cano escuro atravessando o canto da tela.
+            var mao = Modelos.MaoComLanterna();
+            mao.Name = "Lanterna";
+            _mao.AddChild(mao);
 
             // vidro da frente: acende junto com a luz e some quando ela apaga
-            _vidroDaLanterna = new MeshInstance3D
-            {
-                Mesh = new CylinderMesh
-                {
-                    TopRadius = 0.028f, BottomRadius = 0.022f, Height = 0.03f, RadialSegments = 12
-                },
-                Position = new Vector3(0, 0, -0.12f)
-            };
-            _vidroDaLanterna.RotateX(Mathf.Pi / 2);
-            _mao.AddChild(_vidroDaLanterna);
+            _vidroDaLanterna = mao.GetNode<MeshInstance3D>("Vidro");
 
             _matVidro = new StandardMaterial3D
             {
@@ -399,17 +401,20 @@ namespace TurnoDaNoite.Jogo
             portao.Name = "Portao";
             AddChild(portao);
 
+            MontarRecipientes();
+            MontarCenario();
+
             foreach (var f in _partida.Fusiveis)
             {
                 var no = Props.Criar(Peca.Fusivel, new Vector3(0.2f, 0.34f, 0.2f), _matFusivel);
-                no.Position = new Vector3(f.Pos.X, 0.45f, f.Pos.Z);
+                no.Position = PosicaoDoItem(f);
                 _raizItens.AddChild(no);
                 _fusiveis.Add(no);
             }
             foreach (var b in _partida.Baterias)
             {
                 var no = Props.Criar(Peca.Bateria, new Vector3(0.16f, 0.26f, 0.16f), _matBateria);
-                no.Position = new Vector3(b.Pos.X, 0.35f, b.Pos.Z);
+                no.Position = PosicaoDoItem(b);
                 _raizItens.AddChild(no);
                 _baterias.Add(no);
             }
@@ -417,6 +422,108 @@ namespace TurnoDaNoite.Jogo
             _criatura = Props.Criar(Peca.Criatura, new Vector3(0.7f, 2.35f, 0.5f), _matCriatura);
             AddChild(_criatura);
             _animCriatura = AcharAnimador(_criatura);
+        }
+
+        static Peca PecaDo(TipoRecipiente t) => t switch
+        {
+            TipoRecipiente.CaixaDeFerramentas => Peca.CaixaFerramentas,
+            TipoRecipiente.Gaveteiro => Peca.Gaveteiro,
+            _ => Peca.Prateleira
+        };
+
+        /// <summary>
+        /// Onde o item aparece depois que o recipiente abre, no espaço do móvel.
+        /// São alturas de prateleira e de gaveta, não números redondos: item
+        /// pairando entre dois níveis denuncia na hora que ele não está apoiado
+        /// em nada. O Z tira ele de dentro do corpo do móvel e põe na gaveta
+        /// aberta, que é o lugar de onde você o pegaria.
+        /// </summary>
+        static Vector3 LugarNoRecipiente(TipoRecipiente t) => t switch
+        {
+            TipoRecipiente.CaixaDeFerramentas => new Vector3(0, 0.30f, 0.02f),
+            TipoRecipiente.Gaveteiro => new Vector3(0, 0.56f, 0.30f),
+            _ => new Vector3(-0.22f, 1.19f, 0.02f)
+        };
+
+        /// <summary>Posição de mundo do item, já girada junto com o móvel que o guarda.</summary>
+        Vector3 PosicaoDoItem(Item it)
+        {
+            if (it.Dentro < 0) return new Vector3(it.Pos.X, 0.45f, it.Pos.Z);
+
+            var no = _recipientes[it.Dentro];
+            var local = LugarNoRecipiente(no.Tipo);
+            var girado = local.Rotated(Vector3.Up, no.Raiz.Rotation.Y);
+            return new Vector3(it.Pos.X + girado.X, girado.Y, it.Pos.Z + girado.Z);
+        }
+
+        void MontarRecipientes()
+        {
+            var raiz = new Node3D { Name = "Recipientes" };
+            AddChild(raiz);
+
+            foreach (var r in _partida.Recipientes)
+            {
+                var no = Props.Criar(PecaDo(r.Tipo), Modelos.TamanhoGaveteiro, _matArmario);
+                no.Position = new Vector3(r.Pos.X, 0, r.Pos.Z);
+                // gira cada um um pouco: fileira de móveis alinhados denuncia grade
+                no.RotateY(Mathf.Tau * (Mathf.Abs(r.Pos.X * 7.13f + r.Pos.Z * 3.31f) % 1f));
+                raiz.AddChild(no);
+
+                _recipientes.Add(new NoRecipiente
+                {
+                    Raiz = no,
+                    Tampa = no.GetNodeOrNull<Node3D>("Tampa") ?? AcharPorNome(no, "Tampa"),
+                    Tipo = r.Tipo
+                });
+            }
+        }
+
+        /// <summary>
+        /// Põe na tela o cenário que o núcleo já decidiu onde fica. Aqui não se
+        /// escolhe nada: se a posição fosse sorteada de novo neste lado, o que
+        /// você vê e o que te empurra seriam coisas diferentes.
+        /// </summary>
+        void MontarCenario()
+        {
+            var raiz = new Node3D { Name = "Cenario" };
+            AddChild(raiz);
+
+            foreach (var a in _partida.Adornos)
+            {
+                Node3D no = a.Tipo switch
+                {
+                    TipoAdorno.Caixote => Props.Criar(Peca.Caixote, new Vector3(0.85f, 0.8f, 0.85f), _matArmario),
+                    TipoAdorno.Barril => Props.Criar(Peca.Barril, new Vector3(0.72f, 0.95f, 0.72f), _matArmario),
+                    TipoAdorno.Bancada => Props.Criar(Peca.Bancada, Vector3.One, _matArmario),
+                    TipoAdorno.Pilha => Props.Criar(Peca.Pilha, Vector3.One, _matArmario),
+                    TipoAdorno.Entulho => Props.Criar(Peca.Entulho, Vector3.One, _matArmario),
+                    TipoAdorno.CanoParede => Modelos.CanoParede(),
+                    _ => Modelos.CanoTeto(ComprimentoDoCano(a.Pos))
+                };
+
+                no.Position = new Vector3(a.Pos.X, 0, a.Pos.Z);
+                no.RotateY(a.Giro);
+                raiz.AddChild(no);
+            }
+        }
+
+        /// <summary>O cano de teto atravessa a sala inteira, então precisa do tamanho dela.</summary>
+        float ComprimentoDoCano(P2 pos)
+        {
+            var sala = _partida.Predio.SalaEm(pos);
+            if (sala == null) return Predio.Celula * 3f;
+            return Mathf.Max(sala.Larg, sala.Alt) * Predio.Celula * 0.9f;
+        }
+
+        static Node3D AcharPorNome(Node raiz, string nome)
+        {
+            foreach (var filho in raiz.GetChildren())
+            {
+                if (filho.Name == nome && filho is Node3D n) return n;
+                var achado = AcharPorNome(filho, nome);
+                if (achado != null) return achado;
+            }
+            return null;
         }
 
         /// <summary>
@@ -583,7 +690,14 @@ namespace TurnoDaNoite.Jogo
                 // e gira a câmera devagar para não fotografar sempre a mesma parede
                 if (!_naAbertura)
                 {
-                    if (_verItem)
+                    if (_verRecipiente)
+                    {
+                        var rec = _partida.Recipientes[_partida.Fusiveis[0].Dentro];
+                        _partida.Jogador.Pos = new P2(rec.Pos.X, rec.Pos.Z + 1.7f);
+                        _giro = 0; _inclinacao = -0.35f;
+                        SincronizarRecipientes(dt);
+                    }
+                    else if (_verItem)
                     {
                         // encosta no item para julgar o modelo, em vez de adivinhar
                         var alvo = _partida.Fusiveis[0].Pos;
@@ -592,7 +706,8 @@ namespace TurnoDaNoite.Jogo
                     }
                     else { _partida.Passo(1f / 60f, new Comando()); _giro += dt * 0.35f; }
                 }
-                _inclinacao = -0.14f;   // olha um pouco para baixo: mostra chao e parede
+                if (!_verRecipiente)
+                    _inclinacao = -0.14f;   // olha um pouco para baixo: mostra chao e parede
                 _quadrosDeFoto++;
                 SincronizarCamera(dt);
                 SincronizarItens(dt);
@@ -616,6 +731,8 @@ namespace TurnoDaNoite.Jogo
                 if (_quadrosDeFoto == 150) TirarFoto("res://captura_1.png");
                 // depois da foto do menu, dispensa ele e fotografa o jogo
                 if (_quadrosDeFoto == 160 && _menu != null) _menu.PularTudo();
+                // abre o recipiente entre uma foto e outra: dá para comparar
+                if (_quadrosDeFoto == 240 && _verRecipiente) _partida.Interagir();
                 if (_quadrosDeFoto == 330) TirarFoto("res://captura_2.png");
                 if (_quadrosDeFoto >= 340) GetTree().Quit();
                 return;
@@ -665,29 +782,71 @@ namespace TurnoDaNoite.Jogo
                     _matVidro.EmissionEnergyMultiplier = j.LuzAcesa ? 1.4f * Mathf.Clamp(j.Bateria * 3f, 0.3f, 1f) : 0f;
             }
             // a luz fraqueja junto com a bateria: avisa antes de apagar
-            if (!_forcarLuz) _lanterna.LightEnergy = 32f * Mathf.Clamp(j.Bateria * 3f, 0.25f, 1f);
+            if (!_forcarLuz)
+                _lanterna.LightEnergy = EnergiaDaLanterna * Mathf.Clamp(j.Bateria * 3f, 0.25f, 1f);
             _camera.Fov = j.Correndo ? 80 : 74;
         }
 
         void SincronizarItens(float dt)
         {
             float t = _partida.Tempo;
+
+            SincronizarRecipientes(dt);
+
             for (int i = 0; i < _fusiveis.Count; i++)
             {
-                _fusiveis[i].Visible = !_partida.Fusiveis[i].Recolhido;
-                _fusiveis[i].Position = new Vector3(_partida.Fusiveis[i].Pos.X,
-                    0.45f + Mathf.Sin(t * 1.6f + i) * 0.06f, _partida.Fusiveis[i].Pos.Z);
+                var f = _partida.Fusiveis[i];
+                _fusiveis[i].Visible = !f.Recolhido && Revelado(f);
+                var onde = PosicaoDoItem(f);
+                _fusiveis[i].Position = onde + new Vector3(0, Mathf.Sin(t * 1.6f + i) * 0.03f, 0);
                 _fusiveis[i].RotateY(dt * 0.9f);
             }
             for (int i = 0; i < _baterias.Count; i++)
             {
-                _baterias[i].Visible = !_partida.Baterias[i].Recolhido;
+                var b = _partida.Baterias[i];
+                _baterias[i].Visible = !b.Recolhido && Revelado(b);
                 _baterias[i].RotateY(dt * 0.6f);
             }
 
             var portao = GetNodeOrNull<Node3D>("Portao");
             if (portao != null && _partida.PortaoAberto)
                 portao.Position = new Vector3(_partida.Portao.X, -2.6f, _partida.Portao.Z);  // sobe a grade
+        }
+
+        /// <summary>O item só existe para os olhos depois que a tampa saiu da frente.</summary>
+        bool Revelado(Item it) =>
+            it.Dentro < 0 || _recipientes[it.Dentro].Abertura > 0.45f;
+
+        /// <summary>
+        /// A abertura é interpolada, não instantânea: gaveta que salta para fora
+        /// num quadro parece bug. Meio segundo de movimento é o que transforma
+        /// "o estado mudou" em "eu abri isso agora".
+        /// </summary>
+        void SincronizarRecipientes(float dt)
+        {
+            for (int i = 0; i < _recipientes.Count; i++)
+            {
+                var no = _recipientes[i];
+                float alvo = _partida.Recipientes[i].Aberto ? 1f : 0f;
+                if (Mathf.IsEqualApprox(no.Abertura, alvo)) continue;
+
+                no.Abertura = Mathf.MoveToward(no.Abertura, alvo, dt * 2.2f);
+                if (no.Tampa == null) continue;
+
+                float a = no.Abertura;
+                switch (no.Tipo)
+                {
+                    case TipoRecipiente.CaixaDeFerramentas:
+                        no.Tampa.Rotation = new Vector3(-a * 1.9f, 0, 0);   // tampa cai para trás
+                        break;
+                    case TipoRecipiente.Gaveteiro:
+                        no.Tampa.Position = new Vector3(0, 0, a * 0.34f);   // gavetas saltam
+                        break;
+                    default:
+                        no.Tampa.Rotation = new Vector3(0, 0, a * 1.15f);   // a caixa tomba
+                        break;
+                }
+            }
         }
 
         void SincronizarCriatura(float dt)
@@ -734,6 +893,10 @@ namespace TurnoDaNoite.Jogo
                    _partida.Predio.BlocosDeParede().Count > 20);
             Checar($"fusíveis na cena ({_fusiveis.Count})", _fusiveis.Count == Regras.FusiveisNecessarios);
             Checar($"armários na cena ({_partida.Armarios.Count})", _partida.Armarios.Count >= 8);
+            Checar($"recipientes na cena ({_recipientes.Count})",
+                   _recipientes.Count == _partida.Recipientes.Count && _recipientes.Count >= 20);
+            Checar("todo recipiente tem peça móvel",
+                   _recipientes.TrueForAll(r => r.Tampa != null));
             Checar("câmera criada", _camera != null);
             Checar("lanterna criada", _lanterna != null);
             Checar("criatura na cena", _criatura != null);

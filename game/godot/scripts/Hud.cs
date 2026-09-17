@@ -176,8 +176,9 @@ namespace TurnoDaNoite.Jogo
 
         static string DicaDoAlvo(Partida p)
         {
-            return p.AlvoMaisPerto(out _) switch
+            return p.AlvoMaisPerto(out var obj) switch
             {
+                Partida.Alvo.Recipiente => $"E — revistar {((Recipiente)obj).Nome}",
                 Partida.Alvo.Fusivel => "E — pegar fusível",
                 Partida.Alvo.Bateria => "E — pegar bateria",
                 Partida.Alvo.Armario => "E — se esconder",

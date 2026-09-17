@@ -1,4 +1,5 @@
 using Godot;
+using TurnoDaNoite.Core;
 
 namespace TurnoDaNoite.Jogo
 {
@@ -200,6 +201,369 @@ namespace TurnoDaNoite.Jogo
             raiz.AddChild(Cilindro(raio * 1.06f, 0.05f, MetalEscuro, new Vector3(0, a * 0.28f, 0), 16));
             raiz.AddChild(Cilindro(raio * 1.06f, 0.05f, MetalEscuro, new Vector3(0, a * 0.72f, 0), 16));
             raiz.AddChild(Cilindro(raio * 0.25f, 0.03f, Metal, new Vector3(raio * 0.4f, a + 0.01f, 0), 10));
+            return raiz;
+        }
+
+        // ------------------------------------------------ recipientes que se abrem
+        //
+        // Os três têm uma peça móvel chamada "Tampa". Quem monta a cena guarda
+        // esse nó e gira/desliza ele quando o jogador revista: abrir precisa ter
+        // consequência visível, senão você revista a mesma gaveta três vezes sem
+        // perceber. O tamanho é decidido aqui, e não por quem chama, porque a
+        // proporção é o que faz a coisa ser reconhecível.
+
+        public static Vector3 TamanhoCaixaFerramentas => new(0.58f, 0.26f, 0.30f);
+        public static Vector3 TamanhoGaveteiro => new(0.66f, 1.02f, 0.52f);
+        public static Vector3 TamanhoPrateleira => new(1.30f, 1.75f, 0.42f);
+
+        /// <summary>Caixa de ferramentas de chapa, com tampa de abrir e alça em arco.</summary>
+        public static Node3D CaixaFerramentas()
+        {
+            var raiz = new Node3D();
+            var t = TamanhoCaixaFerramentas;
+            var chapa = new StandardMaterial3D
+            {
+                // vermelho de caixa velha, nao laranja de plastico novo
+                AlbedoColor = new Color(0.30f, 0.12f, 0.09f), Metallic = 0.45f, Roughness = 0.72f
+            };
+
+            raiz.AddChild(Caixa(new Vector3(t.X, t.Y, t.Z), chapa, new Vector3(0, t.Y / 2, 0)));
+
+            // A tampa é filha de um pivô na dobradiça de trás. Girar o pivô abre;
+            // girar a tampa em si a faria atravessar a caixa.
+            var pivo = new Node3D { Name = "Tampa", Position = new Vector3(0, t.Y, -t.Z / 2) };
+            pivo.AddChild(Caixa(new Vector3(t.X, 0.05f, t.Z), chapa, new Vector3(0, 0.025f, t.Z / 2)));
+            var alca = Cilindro(0.012f, t.X * 0.55f, Metal, new Vector3(0, 0.10f, t.Z / 2), 8);
+            alca.RotateZ(Mathf.Pi / 2);   // deita a alça no eixo X
+            pivo.AddChild(alca);
+            raiz.AddChild(pivo);
+
+            raiz.AddChild(Caixa(new Vector3(0.05f, 0.05f, 0.02f), Metal,
+                new Vector3(0, t.Y * 0.55f, t.Z / 2 + 0.01f)));
+            return raiz;
+        }
+
+        /// <summary>Gaveteiro de três gavetas. Revistar puxa as três de uma vez.</summary>
+        public static Node3D Gaveteiro()
+        {
+            var raiz = new Node3D();
+            var t = TamanhoGaveteiro;
+            var carcaca = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.30f, 0.32f, 0.31f), Metallic = 0.5f, Roughness = 0.62f
+            };
+            var frente = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.37f, 0.39f, 0.38f), Metallic = 0.45f, Roughness = 0.55f
+            };
+
+            raiz.AddChild(Caixa(new Vector3(t.X, t.Y, t.Z), carcaca, new Vector3(0, t.Y / 2, 0)));
+
+            // As gavetas vão juntas num pivô que desliza em +Z quando abre.
+            var gavetas = new Node3D { Name = "Tampa" };
+            for (int i = 0; i < 3; i++)
+            {
+                float y = t.Y * (0.20f + i * 0.30f);
+                gavetas.AddChild(Caixa(new Vector3(t.X * 0.92f, t.Y * 0.26f, 0.04f), frente,
+                    new Vector3(0, y, t.Z / 2 + 0.02f)));
+                gavetas.AddChild(Caixa(new Vector3(t.X * 0.30f, 0.035f, 0.03f), Metal,
+                    new Vector3(0, y, t.Z / 2 + 0.05f)));
+            }
+            raiz.AddChild(gavetas);
+
+            // rodapé recuado: tira o ar de caixa pousada no chão
+            raiz.AddChild(Caixa(new Vector3(t.X * 0.9f, 0.06f, t.Z * 0.9f), Borracha,
+                new Vector3(0, 0.03f, 0)));
+            return raiz;
+        }
+
+        /// <summary>
+        /// Prateleira de aço com caixas e um tambor pequeno. Não tem porta: o que
+        /// muda ao revistar é a caixa de cima, que fica tombada para o lado.
+        /// </summary>
+        public static Node3D Prateleira()
+        {
+            var raiz = new Node3D();
+            var t = TamanhoPrateleira;
+            var aco = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.33f, 0.31f, 0.28f), Metallic = 0.6f, Roughness = 0.6f
+            };
+            var papelao = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.45f, 0.35f, 0.24f), Roughness = 0.95f
+            };
+
+            foreach (float sx in new[] { -1f, 1f })
+                foreach (float sz in new[] { -1f, 1f })
+                    raiz.AddChild(Caixa(new Vector3(0.05f, t.Y, 0.05f), aco,
+                        new Vector3(sx * t.X * 0.46f, t.Y / 2, sz * t.Z * 0.42f)));
+
+            for (int i = 0; i < 4; i++)
+                raiz.AddChild(Caixa(new Vector3(t.X, 0.035f, t.Z), aco,
+                    new Vector3(0, 0.12f + i * (t.Y - 0.2f) / 3f, 0)));
+
+            raiz.AddChild(Caixa(new Vector3(0.34f, 0.26f, 0.30f), papelao,
+                new Vector3(-t.X * 0.24f, 0.12f + 0.035f + 0.13f, 0)));
+            raiz.AddChild(Cilindro(0.13f, 0.34f, MetalEscuro,
+                new Vector3(t.X * 0.27f, 0.12f + (t.Y - 0.2f) / 3f + 0.19f, 0), 12));
+
+            // A caixa que tomba fica no próprio pivô, com o mesh na origem local:
+            // assim girar o nó a vira no lugar em vez de arremessá-la pela sala.
+            var tombar = new Node3D
+            {
+                Name = "Tampa",
+                Position = new Vector3(t.X * 0.18f, 0.12f + 2 * (t.Y - 0.2f) / 3f + 0.14f, 0)
+            };
+            tombar.AddChild(Caixa(new Vector3(0.30f, 0.24f, 0.28f), papelao, Vector3.Zero));
+            raiz.AddChild(tombar);
+
+            return raiz;
+        }
+
+        // ---------------------------------------------------------- cenário solto
+        //
+        // O que enche as salas. Cada um é pequeno de propósito: o raio de colisão
+        // vive em Core/Cenario.cs e as formas daqui têm de caber nele, senão você
+        // esbarra no ar ou atravessa metade de uma bancada.
+
+        static StandardMaterial3D _madeira, _sujo;
+        static StandardMaterial3D Madeira => _madeira ??= new StandardMaterial3D
+        {
+            AlbedoColor = new Color(0.32f, 0.24f, 0.16f), Roughness = 0.92f
+        };
+        static StandardMaterial3D Sujo => _sujo ??= new StandardMaterial3D
+        {
+            AlbedoColor = new Color(0.24f, 0.23f, 0.21f), Roughness = 0.95f
+        };
+
+        /// <summary>Bancada de oficina: tampo, pés, prateleira embaixo e um torninho.</summary>
+        public static Node3D Bancada()
+        {
+            var raiz = new Node3D();
+            const float l = 0.98f, p = 0.82f, a = 0.88f;
+
+            raiz.AddChild(Caixa(new Vector3(l, 0.06f, p), Madeira, new Vector3(0, a, 0)));
+            foreach (float sx in new[] { -1f, 1f })
+                foreach (float sz in new[] { -1f, 1f })
+                    raiz.AddChild(Caixa(new Vector3(0.07f, a, 0.07f), MetalEscuro,
+                        new Vector3(sx * l * 0.42f, a / 2, sz * p * 0.40f)));
+
+            raiz.AddChild(Caixa(new Vector3(l * 0.9f, 0.04f, p * 0.8f), Sujo,
+                new Vector3(0, a * 0.32f, 0)));
+            raiz.AddChild(Caixa(new Vector3(0.16f, 0.14f, 0.12f), Metal,
+                new Vector3(l * 0.28f, a + 0.09f, 0)));
+            return raiz;
+        }
+
+        /// <summary>Pilha de caixas de papelão encostadas, tortas umas sobre as outras.</summary>
+        public static Node3D Pilha()
+        {
+            var raiz = new Node3D();
+            var papelao = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.42f, 0.33f, 0.22f), Roughness = 0.95f
+            };
+
+            float y = 0;
+            float[] larguras = { 0.72f, 0.62f, 0.50f };
+            float[] tortos = { 0.06f, -0.13f, 0.21f };
+            for (int i = 0; i < 3; i++)
+            {
+                float alt = 0.30f - i * 0.04f;
+                var c = Caixa(new Vector3(larguras[i], alt, larguras[i] * 0.85f), papelao,
+                              new Vector3(0, y + alt / 2, 0));
+                c.RotateY(tortos[i]);
+                raiz.AddChild(c);
+                y += alt;
+            }
+            return raiz;
+        }
+
+        /// <summary>Entulho: tábuas e cacos no chão. Não colide — é para pisar por cima.</summary>
+        public static Node3D Entulho()
+        {
+            var raiz = new Node3D();
+            float[,] pecas =
+            {
+                { 0.80f, 0.03f, 0.11f,  0.10f, 0.4f },
+                { 0.62f, 0.03f, 0.09f, -0.22f, 1.1f },
+                { 0.30f, 0.05f, 0.24f,  0.28f, 2.2f },
+                { 0.18f, 0.08f, 0.16f, -0.10f, 0.7f }
+            };
+            for (int i = 0; i < pecas.GetLength(0); i++)
+            {
+                var c = Caixa(new Vector3(pecas[i, 0], pecas[i, 1], pecas[i, 2]),
+                              i < 2 ? Madeira : Sujo,
+                              new Vector3(pecas[i, 3], pecas[i, 1] / 2, pecas[i, 3] * 0.6f));
+                c.RotateY(pecas[i, 4]);
+                raiz.AddChild(c);
+            }
+            return raiz;
+        }
+
+        /// <summary>Cano descendo pela parede, com duas abraçadeiras. Só passa raspando.</summary>
+        public static Node3D CanoParede()
+        {
+            var raiz = new Node3D();
+            float h = Predio.PeDireito;
+
+            raiz.AddChild(Cilindro(0.06f, h, MetalEscuro, new Vector3(0, h / 2, 0), 10));
+            raiz.AddChild(Cilindro(0.075f, 0.06f, Metal, new Vector3(0, h * 0.25f, 0), 10));
+            raiz.AddChild(Cilindro(0.075f, 0.06f, Metal, new Vector3(0, h * 0.75f, 0), 10));
+            // joelho na altura do peito: quebra a linha reta, que é o que cansa a vista
+            var joelho = Cilindro(0.06f, 0.42f, MetalEscuro, new Vector3(0.20f, h * 0.55f, 0), 10);
+            joelho.RotateZ(Mathf.Pi / 2);
+            raiz.AddChild(joelho);
+            return raiz;
+        }
+
+        /// <summary>
+        /// Cano atravessando o teto da sala, com tirantes. É o que mais faz o
+        /// lugar parecer um prédio de verdade e não uma caixa de papelão.
+        /// </summary>
+        public static Node3D CanoTeto(float comprimento)
+        {
+            var raiz = new Node3D();
+            float y = Predio.PeDireito - 0.32f;
+
+            var cano = Cilindro(0.075f, comprimento, MetalEscuro, new Vector3(0, y, 0), 10);
+            cano.RotateX(Mathf.Pi / 2);            // deita no eixo Z
+            raiz.AddChild(cano);
+
+            var fino = Cilindro(0.035f, comprimento * 0.92f, Sujo, new Vector3(0.22f, y - 0.07f, 0), 8);
+            fino.RotateX(Mathf.Pi / 2);
+            raiz.AddChild(fino);
+
+            int quantos = Mathf.Max(2, (int)(comprimento / 3.2f));
+            for (int i = 0; i < quantos; i++)
+            {
+                float z = -comprimento / 2 + comprimento * (i + 0.5f) / quantos;
+                raiz.AddChild(Caixa(new Vector3(0.03f, 0.30f, 0.03f), Metal,
+                    new Vector3(0, y + 0.18f, z)));
+            }
+            return raiz;
+        }
+
+        // ------------------------------------------------------------ a mão
+
+        /// <summary>
+        /// A mão segurando a lanterna, em primeira pessoa. É a única peça que
+        /// fica na tela o tempo todo, então é a que mais paga atenção ao detalhe:
+        /// enquanto era um cilindro liso, virava um cano escuro atravessando o
+        /// canto do quadro, e nenhum resto de cenário bonito compensava isso.
+        ///
+        /// Os nós "Vidro" e "Corpo" saem nomeados porque quem chama precisa
+        /// acender um e não pode deixar nenhum projetar sombra.
+        /// </summary>
+        public static Node3D MaoComLanterna()
+        {
+            var raiz = new Node3D();
+
+            var corpoMat = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.14f, 0.15f, 0.17f), Metallic = 0.75f, Roughness = 0.32f
+            };
+            var pegaMat = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.07f, 0.07f, 0.08f), Roughness = 0.9f
+            };
+            var luvaMat = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.13f, 0.12f, 0.12f), Roughness = 0.88f
+            };
+            var mangaMat = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.09f, 0.10f, 0.12f), Roughness = 0.95f
+            };
+
+            // ---- lanterna: tubo, pega emborrachada, cabeça cônica e aro
+            var corpo = new Node3D { Name = "Corpo" };
+
+            var tubo = Cilindro(0.026f, 0.21f, corpoMat, new Vector3(0, 0, -0.015f), 16);
+            tubo.RotateX(Mathf.Pi / 2);
+            corpo.AddChild(tubo);
+
+            var pega = Cilindro(0.029f, 0.075f, pegaMat, new Vector3(0, 0, 0.035f), 16);
+            pega.RotateX(Mathf.Pi / 2);
+            corpo.AddChild(pega);
+
+            var cabeca = new MeshInstance3D
+            {
+                Mesh = new CylinderMesh
+                {
+                    TopRadius = 0.042f, BottomRadius = 0.027f, Height = 0.06f, RadialSegments = 16
+                },
+                MaterialOverride = corpoMat,
+                Position = new Vector3(0, 0, -0.145f)
+            };
+            cabeca.RotateX(-Mathf.Pi / 2);      // a boca larga vira para a frente
+            corpo.AddChild(cabeca);
+
+            var aro = Cilindro(0.044f, 0.012f, pegaMat, new Vector3(0, 0, -0.174f), 16);
+            aro.RotateX(Mathf.Pi / 2);
+            corpo.AddChild(aro);
+
+            // tampa de trás, para o tubo não terminar num buraco
+            var tampa = Cilindro(0.027f, 0.014f, pegaMat, new Vector3(0, 0, 0.082f), 16);
+            tampa.RotateX(Mathf.Pi / 2);
+            corpo.AddChild(tampa);
+
+            raiz.AddChild(corpo);
+
+            // ---- o vidro, que acende junto com a luz
+            var vidro = new MeshInstance3D
+            {
+                Name = "Vidro",
+                Mesh = new CylinderMesh
+                {
+                    TopRadius = 0.036f, BottomRadius = 0.030f, Height = 0.014f, RadialSegments = 16
+                },
+                // na frente do aro, e nao atras: escondido atras dele o vidro
+                // virava um buraco preto no meio da lanterna
+                Position = new Vector3(0, 0, -0.182f)
+            };
+            vidro.RotateX(Mathf.Pi / 2);
+            raiz.AddChild(vidro);
+
+            // ---- a mão: palma, quatro dedos por cima do tubo e o polegar do lado
+            var palma = Caixa(new Vector3(0.085f, 0.055f, 0.105f), luvaMat,
+                              new Vector3(0.012f, -0.030f, 0.040f));
+            palma.RotateY(0.12f);
+            raiz.AddChild(palma);
+
+            for (int i = 0; i < 4; i++)
+            {
+                float z = 0.005f + i * 0.026f;
+                float raio = 0.0115f - i * 0.0006f;
+                var dedo = Cilindro(raio, 0.072f, luvaMat, new Vector3(-0.004f, -0.006f, z), 8);
+                dedo.RotateZ(Mathf.Pi / 2);      // deita o dedo atravessado no tubo
+                dedo.RotateX(0.10f);
+                raiz.AddChild(dedo);
+            }
+
+            var polegar = Cilindro(0.012f, 0.055f, luvaMat, new Vector3(0.030f, -0.022f, 0.015f), 8);
+            polegar.RotateX(Mathf.Pi / 2);
+            polegar.RotateZ(-0.45f);
+            raiz.AddChild(polegar);
+
+            // ---- punho e manga, saindo para baixo e para trás
+            var punho = Cilindro(0.040f, 0.040f, mangaMat, new Vector3(0.020f, -0.055f, 0.105f), 12);
+            punho.RotateX(Mathf.Pi / 2 - 0.5f);
+            raiz.AddChild(punho);
+
+            var manga = new MeshInstance3D
+            {
+                Mesh = new CylinderMesh
+                {
+                    TopRadius = 0.040f, BottomRadius = 0.058f, Height = 0.26f, RadialSegments = 12
+                },
+                MaterialOverride = mangaMat,
+                Position = new Vector3(0.036f, -0.120f, 0.215f)
+            };
+            manga.RotateX(Mathf.Pi / 2 - 0.5f);
+            raiz.AddChild(manga);
+
             return raiz;
         }
     }

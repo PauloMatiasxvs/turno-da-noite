@@ -22,9 +22,28 @@ Coloque os arquivos em `game/godot/assets/modelos/` com estes nomes exatos
 | `bateria` | pilha da lanterna | 0,16 × 0,26 × 0,16 m |
 | `criatura` | **o inimigo** | 0,7 × 2,35 × 0,5 m |
 | `luminaria` | lâmpada de teto | 1,2 × 0,12 × 0,3 m |
-| `caixote` | entulho de cenário | 0,8 m |
-| `barril` | entulho de cenário | 0,6 × 0,9 m |
+| `caixote` | entulho de cenário | 0,85 × 0,8 × 0,85 m |
+| `barril` | entulho de cenário | 0,72 × 0,95 m |
 | `cano` | tubulação de parede | 0,2 × 3,0 m |
+| `caixa_ferramentas` | recipiente de revistar, no chão | 0,58 × 0,26 × 0,30 m |
+| `gaveteiro` | recipiente de revistar, três gavetas | 0,66 × 1,02 × 0,52 m |
+| `prateleira` | recipiente de revistar, estante de aço | 1,30 × 1,75 × 0,42 m |
+| `bancada` | bancada de oficina | 0,98 × 0,88 × 0,82 m |
+| `pilha` | pilha de caixas de papelão | 0,72 × 0,9 m |
+| `entulho` | tábuas e cacos no chão | 0,8 × 0,1 m |
+| `mao_com_lanterna` | a mão do jogador em primeira pessoa | segurando a lanterna, apontada para −Z |
+
+### Os recipientes precisam de uma peça chamada `Tampa`
+
+`caixa_ferramentas`, `gaveteiro` e `prateleira` são os móveis que o jogador abre.
+Se o seu modelo tiver um nó filho chamado exatamente **`Tampa`**, o jogo anima esse
+nó ao revistar — gira a tampa, puxa as gavetas, tomba a caixa. Sem esse nó o móvel
+funciona igual, mas abre sem nenhum sinal visível, e aí dá para revistar o mesmo
+gaveteiro três vezes sem perceber.
+
+Os limites de colisão dos móveis de cenário ficam em `game/core/Cenario.cs`: nenhum
+passa de 0,45 m de raio, senão ele fecha a passagem pelo meio da célula. Modelo mais
+largo que isso fica bonito e intransponível ao mesmo tempo.
 
 O jogo **redimensiona sozinho** o modelo para caber nessa caixa e apoia a base no
 chão — então não se preocupe se o artista modelou em centímetros ou com o pivô no

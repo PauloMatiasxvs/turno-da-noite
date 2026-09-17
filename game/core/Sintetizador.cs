@@ -19,16 +19,39 @@ namespace TurnoDaNoite.Core
         {
             public float Segundos, DeHz, ParaHz, Volume, Ruido;
 
-            public Receita(float segundos, float deHz, float paraHz, float volume, float ruido)
+            /// <summary>
+            /// Tempo de subida. Dez milissegundos servem para sopro e rangido,
+            /// mas apagam a batida de um impacto: pisada precisa começar quase
+            /// de uma vez, senão vira um bipe macio em vez de um pé no chão.
+            /// </summary>
+            public float Ataque;
+
+            /// <summary>Expoente da queda. 2 é o normal; 4 é seco, 1 é arrastado.</summary>
+            public float Queda;
+
+            /// <summary>
+            /// Abertura do filtro do ruído. Baixo abafa, alto deixa a areia
+            /// aparecer. É a diferença entre um baque surdo e um pé raspando
+            /// no concreto.
+            /// </summary>
+            public float Corte;
+
+            public Receita(float segundos, float deHz, float paraHz, float volume, float ruido,
+                           float ataque = 0.010f, float queda = 2.0f, float corte = 0.25f)
             {
                 Segundos = segundos; DeHz = deHz; ParaHz = paraHz; Volume = volume; Ruido = ruido;
+                Ataque = ataque; Queda = queda; Corte = corte;
             }
         }
 
         public static Receita Para(Evento ev) => ev switch
         {
-            Evento.Passo           => new Receita(0.12f, 190,  80,   0.20f, 0.70f),
-            Evento.PassoDela       => new Receita(0.24f, 130,  50,   0.50f, 0.60f),
+            // Pisada: quase só ruído, e ruído aberto. A senoide grave fica de
+            // corpo, não de melodia — com 0,70 de ruído e filtro fechado sobrava
+            // tom suficiente para o ouvido escutar uma nota, e nota repetida a
+            // cada meio segundo vira bipe de aparelho, não passo.
+            Evento.Passo           => new Receita(0.13f, 150,  62,   0.22f, 0.93f, 0.002f, 3.2f, 0.45f),
+            Evento.PassoDela       => new Receita(0.26f, 110,  44,   0.50f, 0.88f, 0.004f, 2.6f, 0.38f),
             Evento.Respiracao      => new Receita(0.45f, 420,  190,  0.10f, 0.75f),
             Evento.Ofegante        => new Receita(0.60f, 520,  180,  0.26f, 0.80f),
             Evento.Batida          => new Receita(0.28f, 95,   48,   0.16f, 0f),
@@ -49,10 +72,51 @@ namespace TurnoDaNoite.Core
             Evento.VoceEscapou     => new Receita(1.30f, 220,  440,  0.38f, 0f),
             Evento.PortaoTrancado  => new Receita(0.32f, 300,  110,  0.32f, 0.50f),
             Evento.PortaoBateu     => new Receita(0.80f, 140,  38,   0.52f, 0.45f),
+            Evento.AbriuRecipiente => new Receita(0.40f, 520,  180,  0.28f, 0.70f),
+            Evento.RecipienteVazio => new Receita(0.34f, 380,  150,  0.22f, 0.75f),
             _ => default
         };
 
         public static bool Existe(Evento ev) => Para(ev).Segundos > 0f;
+
+        /// <summary>
+        /// Quantas gravações diferentes do mesmo evento existem. Passo precisa
+        /// de várias: dois pés nunca batem igual, e a mesma onda repetida a cada
+        /// meio segundo deixa de soar como pisada e passa a soar como aparelho
+        /// apitando. Os sons que tocam uma vez por partida não precisam disso.
+        /// </summary>
+        public static int Variacoes(Evento ev) => ev switch
+        {
+            Evento.Passo or Evento.PassoDela => 6,
+            Evento.Respiracao or Evento.Ofegante => 4,
+            Evento.Batida or Evento.AbriuRecipiente or Evento.RecipienteVazio => 3,
+            _ => 1
+        };
+
+        /// <summary>
+        /// A receita do evento com o tempero da variação: passada um pouco mais
+        /// curta, um pouco mais grave, um pouco mais fraca. Nada grande — se a
+        /// diferença for grande você escuta dois sons distintos em vez de um som
+        /// que respira.
+        /// </summary>
+        public static Receita Para(Evento ev, int variacao)
+        {
+            var r = Para(ev);
+            if (variacao <= 0 || Variacoes(ev) <= 1) return r;
+
+            // desvios fixos, sem sorteio: som tem de ser reproduzível para o
+            // teste conseguir medir estalo nele
+            float[] tom = { 1f, 0.94f, 1.07f, 0.90f, 1.03f, 0.97f };
+            float[] forca = { 1f, 0.88f, 1.05f, 0.93f, 0.97f, 1.02f };
+            float[] duracao = { 1f, 0.92f, 1.06f, 0.88f, 1.01f, 0.95f };
+
+            int i = variacao % tom.Length;
+            r.DeHz *= tom[i];
+            r.ParaHz *= tom[i];
+            r.Volume *= forca[i];
+            r.Segundos *= duracao[i];
+            return r;
+        }
 
         /// <summary>
         /// Gera as amostras de 16 bits. O que evita estalo:
@@ -66,7 +130,21 @@ namespace TurnoDaNoite.Core
             int n = Math.Max(2, (int)(Taxa * r.Segundos));
             var saida = new short[n];
 
-            int rampa = Math.Max(1, (int)(Taxa * 0.010f));   // 10 ms de cada lado
+            float ataque = r.Ataque > 0 ? r.Ataque : 0.010f;
+            float corte = r.Corte > 0 ? Math.Clamp(r.Corte, 0.05f, 0.55f) : 0.25f;
+            float queda = r.Queda > 0 ? r.Queda : 2.0f;
+
+            int subida = Math.Max(1, (int)(Taxa * ataque));
+            // a descida continua com 10 ms: é ela que impede o corte seco no fim,
+            // e ninguém escuta "ataque" no fim de um som
+            int descida = Math.Max(1, (int)(Taxa * 0.010f));
+
+            // Ganho que devolve o volume que o filtro tirou. Depende do corte:
+            // filtro mais aberto já deixa passar mais energia, e um ganho fixo
+            // faria o som brilhante sair muito mais alto que o abafado.
+            float porPolo = MathF.Sqrt(corte / (2f - corte));
+            float ganho = 0.162f / MathF.Pow(porPolo, 3f);
+
             uint estado = (uint)(semente == 0 ? 1 : semente);
             float f1 = 0, f2 = 0, f3 = 0;
             float fase = 0;
@@ -84,17 +162,17 @@ namespace TurnoDaNoite.Core
                 // três polos de suavização derrubam o agudo áspero do ruído branco
                 // Coeficiente baixo = filtro forte. A 0,35 o ruido ainda saltava mais
                 // do que a onda exigia, e era isso que raspava no ouvido a cada passo.
-                f1 += (bruto - f1) * 0.25f;
-                f2 += (f1 - f2) * 0.25f;
-                f3 += (f2 - f3) * 0.25f;
-                float chiado = f3 * 3.0f;   // ganho recupera o volume perdido no filtro
+                f1 += (bruto - f1) * corte;
+                f2 += (f1 - f2) * corte;
+                f3 += (f2 - f3) * corte;
+                float chiado = f3 * ganho;
 
                 float tom = MathF.Sin(fase);
                 float corpo = tom + (chiado - tom) * r.Ruido;
 
-                float sobe = MathF.Min(1f, i / (float)rampa);
-                float desce = MathF.Min(1f, (n - 1 - i) / (float)rampa);
-                float decai = MathF.Pow(1f - t, 2.0f);
+                float sobe = MathF.Min(1f, i / (float)subida);
+                float desce = MathF.Min(1f, (n - 1 - i) / (float)descida);
+                float decai = MathF.Pow(1f - t, queda);
 
                 float amostra = corpo * decai * sobe * desce * r.Volume;
                 amostra = Math.Clamp(amostra, -0.85f, 0.85f);   // margem para somas
@@ -117,10 +195,16 @@ namespace TurnoDaNoite.Core
             // duas contribuicoes legitimas: a inclinacao da senoide na frequencia
             // mais alta da varredura, e o passo do ruido depois de filtrado
             float daOnda = MathF.Max(r.DeHz, r.ParaHz) / Taxa * MathF.PI * 2f * r.Volume;
-            // 0,11 medido: e o passo maximo que o ruido de tres polos produz na
-            // pratica. Estava em 0,08 por chute e reprovava sons graves e chiados
-            // que nao estalam de verdade.
-            float doRuido = r.Ruido * r.Volume * 0.11f;
+            // 0,18 medido. Passou por 0,08 (chute) e 0,11 (ajustado a UMA semente,
+            // que e o erro classico): o pico de ruido e sorteado, e medir um unico
+            // sorteio de 35 mil amostras da um numero baixo demais. Nas sementes
+            // que o jogo realmente toca, 0,11 subestimava em ate 60%.
+            //
+            // Escala com o corte porque som brilhante SOBE mais rapido entre duas
+            // amostras por definicao: cobrar dele o mesmo limite do som abafado
+            // seria chamar de defeito o que e a propria natureza do som.
+            float corte = r.Corte > 0 ? Math.Clamp(r.Corte, 0.05f, 0.55f) : 0.25f;
+            float doRuido = r.Ruido * r.Volume * 0.18f * (corte / 0.25f);
             return daOnda + doRuido;
         }
 

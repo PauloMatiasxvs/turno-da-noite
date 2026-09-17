@@ -15,7 +15,13 @@ namespace TurnoDaNoite.Jogo
     /// </summary>
     public static class Som
     {
-        static readonly Dictionary<Evento, AudioStream> Cache = new();
+        /// <summary>
+        /// Um evento pode ter várias gravações. Passo tem seis: enquanto tinha
+        /// uma só, o jogo repetia a mesma onda idêntica duas vezes por segundo,
+        /// e onda idêntica repetida o ouvido reconhece na hora como máquina.
+        /// </summary>
+        static readonly Dictionary<Evento, AudioStream[]> Cache = new();
+        static readonly RandomNumberGenerator Sorte = new();
 
         /// <summary>Eventos que vêm dela e precisam de posição no mundo.</summary>
         static readonly HashSet<Evento> Posicionados = new()
@@ -63,6 +69,13 @@ namespace TurnoDaNoite.Jogo
 
         static AudioStream Obter(Evento ev)
         {
+            var lista = Montar(ev);
+            if (lista == null || lista.Length == 0) return null;
+            return lista.Length == 1 ? lista[0] : lista[Sorte.RandiRange(0, lista.Length - 1)];
+        }
+
+        static AudioStream[] Montar(Evento ev)
+        {
             if (Cache.TryGetValue(ev, out var pronto)) return pronto;
 
             // som gravado, se existir, ganha do sintetizado
@@ -70,12 +83,23 @@ namespace TurnoDaNoite.Jogo
             if (ResourceLoader.Exists(caminho))
             {
                 var arquivo = GD.Load<AudioStream>(caminho);
-                if (arquivo != null) { Cache[ev] = arquivo; return arquivo; }
+                if (arquivo != null) { Cache[ev] = new[] { arquivo }; return Cache[ev]; }
             }
 
             if (!Sintetizador.Existe(ev)) return null;
 
-            short[] amostras = Sintetizador.Gerar(Sintetizador.Para(ev), (int)ev * 977 + 13);
+            int quantas = Sintetizador.Variacoes(ev);
+            var feitas = new AudioStream[quantas];
+            for (int v = 0; v < quantas; v++)
+                feitas[v] = ParaWav(Sintetizador.Gerar(Sintetizador.Para(ev, v),
+                                                       (int)ev * 977 + 13 + v * 7919));
+
+            Cache[ev] = feitas;
+            return feitas;
+        }
+
+        static AudioStreamWav ParaWav(short[] amostras)
+        {
             var pcm = new byte[amostras.Length * 2];
             for (int i = 0; i < amostras.Length; i++)
             {
@@ -83,15 +107,13 @@ namespace TurnoDaNoite.Jogo
                 pcm[i * 2 + 1] = (byte)((amostras[i] >> 8) & 0xFF);
             }
 
-            var feito = new AudioStreamWav
+            return new AudioStreamWav
             {
                 Data = pcm,
                 Format = AudioStreamWav.FormatEnum.Format16Bits,
                 MixRate = Sintetizador.Taxa,
                 Stereo = false
             };
-            Cache[ev] = feito;
-            return feito;
         }
     }
 }

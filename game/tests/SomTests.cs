@@ -125,5 +125,123 @@ namespace TurnoDaNoite.Tests
             // eventos que nao tocam nada devem dizer isso, e nao devolver lixo
             Assert.False(Sintetizador.Existe((Evento)999));
         }
+
+        [Fact]
+        public void OPassoTemVariasGravacoesDiferentes()
+        {
+            Assert.True(Sintetizador.Variacoes(Evento.Passo) >= 4,
+                "passo com uma gravação só soa como aparelho apitando");
+
+            var vistas = new System.Collections.Generic.List<short[]>();
+            for (int v = 0; v < Sintetizador.Variacoes(Evento.Passo); v++)
+                vistas.Add(Sintetizador.Gerar(Sintetizador.Para(Evento.Passo, v),
+                                              (int)Evento.Passo * 977 + 13 + v * 7919));
+
+            for (int a = 0; a < vistas.Count; a++)
+                for (int b = a + 1; b < vistas.Count; b++)
+                    Assert.False(Iguais(vistas[a], vistas[b]),
+                        $"as variações {a} e {b} do passo são a mesma onda");
+        }
+
+        static bool Iguais(short[] x, short[] y)
+        {
+            if (x.Length != y.Length) return false;
+            for (int i = 0; i < x.Length; i++) if (x[i] != y[i]) return false;
+            return true;
+        }
+
+        [Fact]
+        public void NenhumaVariacaoEstalaNemEstoura()
+        {
+            // a variação muda tom, força e duração: nada disso pode reintroduzir
+            // o estalo que custou dois consertos para sumir
+            foreach (var ev in TodosOsEfeitos)
+                for (int v = 0; v < Sintetizador.Variacoes(ev); v++)
+                {
+                    var r = Sintetizador.Para(ev, v);
+                    // a MESMA semente que o jogo usa: medir outra onda que nao a
+                    // que toca no ouvido do jogador nao prova nada
+                    var onda = Sintetizador.Gerar(r, (int)ev * 977 + 13 + v * 7919);
+                    float limite = Sintetizador.SaltoEsperado(r) * 1.35f;
+
+                    Assert.True(Sintetizador.MaiorSalto(onda) <= limite,
+                        $"{ev} variação {v} estala: {Sintetizador.MaiorSalto(onda):0.000} > {limite:0.000}");
+                    foreach (short s in onda)
+                        Assert.True(Math.Abs(s) <= short.MaxValue * 0.86f, $"{ev} variação {v} estoura");
+                    Assert.Equal(0, onda[0]);
+                    Assert.Equal(0, onda[^1]);
+                }
+        }
+
+        [Fact]
+        public void APisadaEhImpactoENaoNota()
+        {
+            var r = Sintetizador.Para(Evento.Passo);
+            Assert.True(r.Ataque <= 0.004f, "pisada com subida lenta vira bipe macio");
+            Assert.True(r.Ruido >= 0.85f, "sobra senoide demais: dá para escutar a nota");
+            Assert.True(r.Segundos <= 0.20f, "pisada comprida demais soa como zumbido");
+        }
+
+        [Fact]
+        public void ARajadaDePassosNaoRepeteAMesmaOnda()
+        {
+            // simula dez passos tirando uma variação de cada vez, como o jogo faz
+            int quantas = Sintetizador.Variacoes(Evento.Passo);
+            var duracoes = new System.Collections.Generic.HashSet<int>();
+            for (int v = 0; v < quantas; v++)
+                duracoes.Add(Sintetizador.Gerar(Sintetizador.Para(Evento.Passo, v)).Length);
+
+            Assert.True(duracoes.Count >= 3,
+                "as variações têm quase todas o mesmo tamanho: a repetição continua audível");
+        }
+    }
+
+    /// <summary>
+    /// O ritmo da caminhada. Som certo no compasso errado continua soando
+    /// errado: uma passada a cada 1,3 segundos não é andar, é passear.
+    /// </summary>
+    public class CadenciaTests
+    {
+        static int PassosEm(float segundos, Comando cmd)
+        {
+            var p = Ajuda.Nova();
+            int passos = 0;
+            int quadros = (int)(segundos * 60);
+            for (int i = 0; i < quadros; i++)
+            {
+                p.Eventos.Clear();
+                p.Passo(1f / 60f, cmd);
+                foreach (var ev in p.Eventos) if (ev == Evento.Passo) passos++;
+                if (p.Fase != Fase.Jogando) break;
+            }
+            return passos;
+        }
+
+        [Fact]
+        public void AndandoDaUmaPassadaPorMeioSegundoMaisOuMenos()
+        {
+            float intervalo = 10f / Math.Max(1, PassosEm(10f, Ajuda.Andando()));
+            Assert.InRange(intervalo, 0.42f, 0.72f);
+        }
+
+        [Fact]
+        public void CorrendoEhMaisRapidoQueAndando()
+        {
+            Assert.True(PassosEm(10f, Ajuda.Andando(correr: true)) > PassosEm(10f, Ajuda.Andando()),
+                "correr tem de bater mais passos que andar");
+        }
+
+        [Fact]
+        public void AgachadoEhMaisLentoQueAndando()
+        {
+            Assert.True(PassosEm(10f, Ajuda.Andando(agachar: true)) < PassosEm(10f, Ajuda.Andando()),
+                "andar agachado tem de ser mais devagar");
+        }
+
+        [Fact]
+        public void ParadoNaoFazPasso()
+        {
+            Assert.Equal(0, PassosEm(5f, Ajuda.Parado));
+        }
     }
 }
