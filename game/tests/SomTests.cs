@@ -177,9 +177,14 @@ namespace TurnoDaNoite.Tests
         public void APisadaEhImpactoENaoNota()
         {
             var r = Sintetizador.Para(Evento.Passo);
-            Assert.True(r.Ataque <= 0.004f, "pisada com subida lenta vira bipe macio");
+            Assert.True(r.Ataque <= 0.008f, "pisada com subida lenta vira bipe macio");
             Assert.True(r.Ruido >= 0.85f, "sobra senoide demais: dá para escutar a nota");
             Assert.True(r.Segundos <= 0.20f, "pisada comprida demais soa como zumbido");
+
+            // e não pode ser o som mais alto do jogo: você ouve isso duas vezes
+            // por segundo a partida inteira, e o que incomoda é o volume
+            Assert.True(r.Volume <= Sintetizador.Para(Evento.ElaRugiu).Volume * 0.4f,
+                "pisada alta demais perto do resto do jogo");
         }
 
         [Fact]

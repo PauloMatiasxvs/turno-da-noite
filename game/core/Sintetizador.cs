@@ -46,11 +46,16 @@ namespace TurnoDaNoite.Core
 
         public static Receita Para(Evento ev) => ev switch
         {
-            // Pisada: quase só ruído, e ruído aberto. A senoide grave fica de
-            // corpo, não de melodia — com 0,70 de ruído e filtro fechado sobrava
-            // tom suficiente para o ouvido escutar uma nota, e nota repetida a
-            // cada meio segundo vira bipe de aparelho, não passo.
-            Evento.Passo           => new Receita(0.13f, 150,  62,   0.22f, 0.93f, 0.002f, 3.2f, 0.45f),
+            // Pisada: quase só ruído. A senoide grave fica de corpo, não de
+            // melodia — com 0,70 de ruído e filtro fechado sobrava tom suficiente
+            // para o ouvido escutar uma nota, e nota repetida a cada meio segundo
+            // vira bipe de aparelho, não passo.
+            //
+            // Suavizada depois de ouvir no jogo: estava seca e arranhada demais
+            // para alguém andando de sapato num corredor. Volume menor, filtro
+            // mais fechado (menos areia) e subida de 6 ms em vez de 2 — ainda é
+            // impacto, mas é o baque abafado de sola, não um estalo.
+            Evento.Passo           => new Receita(0.15f, 135,  55,   0.13f, 0.95f, 0.006f, 2.6f, 0.26f),
             Evento.PassoDela       => new Receita(0.26f, 110,  44,   0.50f, 0.88f, 0.004f, 2.6f, 0.38f),
             Evento.Respiracao      => new Receita(0.45f, 420,  190,  0.10f, 0.75f),
             Evento.Ofegante        => new Receita(0.60f, 520,  180,  0.26f, 0.80f),

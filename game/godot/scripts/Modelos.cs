@@ -248,26 +248,58 @@ namespace TurnoDaNoite.Jogo
         {
             var raiz = new Node3D();
             var t = TamanhoGaveteiro;
+            // Cinza escuro de armário de repartição. Estava bem mais claro e,
+            // com a lanterna a um metro, saía branco estourado na tela.
             var carcaca = new StandardMaterial3D
             {
-                AlbedoColor = new Color(0.30f, 0.32f, 0.31f), Metallic = 0.5f, Roughness = 0.62f
+                AlbedoColor = new Color(0.17f, 0.19f, 0.20f), Metallic = 0.5f, Roughness = 0.68f
             };
             var frente = new StandardMaterial3D
             {
-                AlbedoColor = new Color(0.37f, 0.39f, 0.38f), Metallic = 0.45f, Roughness = 0.55f
+                AlbedoColor = new Color(0.23f, 0.25f, 0.25f), Metallic = 0.45f, Roughness = 0.60f
             };
 
-            raiz.AddChild(Caixa(new Vector3(t.X, t.Y, t.Z), carcaca, new Vector3(0, t.Y / 2, 0)));
+            // O corpo é OCO: cinco chapas em vez de um cubo maciço. Enquanto era
+            // maciço, a gaveta saía de dentro de uma parede fechada, sem buraco
+            // nenhum de onde ela pudesse ter vindo.
+            const float chapa = 0.025f;
+            raiz.AddChild(Caixa(new Vector3(t.X, t.Y, chapa), carcaca,
+                new Vector3(0, t.Y / 2, -t.Z / 2 + chapa / 2)));                    // costas
+            raiz.AddChild(Caixa(new Vector3(t.X, chapa, t.Z), carcaca,
+                new Vector3(0, t.Y - chapa / 2, 0)));                               // tampo
+            raiz.AddChild(Caixa(new Vector3(t.X, chapa, t.Z), carcaca,
+                new Vector3(0, chapa / 2, 0)));                                     // base
+            foreach (float sx in new[] { -1f, 1f })
+                raiz.AddChild(Caixa(new Vector3(chapa, t.Y, t.Z), carcaca,
+                    new Vector3(sx * (t.X / 2 - chapa / 2), t.Y / 2, 0)));          // laterais
 
-            // As gavetas vão juntas num pivô que desliza em +Z quando abre.
+            // As gavetas vão juntas num pivô que desliza em +Z quando abre. Cada
+            // uma é uma bandeja de verdade — frente, piso, dois lados e costas —
+            // e não um painel chapado: painel puxado para fora lê como porta
+            // solta boiando no ar, que foi exatamente o que apareceu na tela.
             var gavetas = new Node3D { Name = "Tampa" };
+            float alturaGaveta = t.Y * 0.27f;
+            float fundoGaveta = t.Z * 0.78f;
+            float zFrente = t.Z / 2 + 0.015f;
+            float zMeio = zFrente - fundoGaveta / 2;
+
             for (int i = 0; i < 3; i++)
             {
                 float y = t.Y * (0.20f + i * 0.30f);
-                gavetas.AddChild(Caixa(new Vector3(t.X * 0.92f, t.Y * 0.26f, 0.04f), frente,
-                    new Vector3(0, y, t.Z / 2 + 0.02f)));
-                gavetas.AddChild(Caixa(new Vector3(t.X * 0.30f, 0.035f, 0.03f), Metal,
-                    new Vector3(0, y, t.Z / 2 + 0.05f)));
+                float piso = y - alturaGaveta / 2;
+
+                gavetas.AddChild(Caixa(new Vector3(t.X * 0.94f, alturaGaveta, 0.03f), frente,
+                    new Vector3(0, y, zFrente)));                                   // frente
+                gavetas.AddChild(Caixa(new Vector3(t.X * 0.86f, 0.018f, fundoGaveta), carcaca,
+                    new Vector3(0, piso + 0.009f, zMeio)));                         // piso
+                foreach (float sx in new[] { -1f, 1f })
+                    gavetas.AddChild(Caixa(new Vector3(0.018f, alturaGaveta * 0.78f, fundoGaveta),
+                        carcaca, new Vector3(sx * t.X * 0.43f, y, zMeio)));         // lados
+                gavetas.AddChild(Caixa(new Vector3(t.X * 0.86f, alturaGaveta * 0.78f, 0.018f),
+                    carcaca, new Vector3(0, y, zFrente - fundoGaveta)));            // costas
+
+                gavetas.AddChild(Caixa(new Vector3(t.X * 0.32f, 0.030f, 0.028f), Metal,
+                    new Vector3(0, y, zFrente + 0.028f)));                          // puxador
             }
             raiz.AddChild(gavetas);
 

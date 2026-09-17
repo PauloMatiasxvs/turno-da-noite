@@ -227,8 +227,14 @@ namespace TurnoDaNoite.Jogo
                 // praticamente toda a luz da lanterna: a cena ficava preta mesmo
                 // com energia 500 no holofote. Exposição acima de 1 e ajustes
                 // desligados devolvem a imagem.
+                // 1,8 vinha do tempo em que a cena estava preta e era preciso
+                // forçar. Com a lanterna calibrada isso passou a estourar tudo
+                // que estivesse a menos de dois metros: um gaveteiro cinza-chumbo
+                // aparecia branco na tela. 1,15 devolve o cinza sem escurecer o
+                // fundo, porque em Godot o holofote quase não perde força com a
+                // distância — quem estava errado era a exposição, não o alcance.
                 TonemapMode = Godot.Environment.ToneMapper.Filmic,
-                TonemapExposure = 1.8f,
+                TonemapExposure = 1.15f,
                 AdjustmentEnabled = false
             };
             if (_semNevoa) env.FogEnabled = false;
@@ -441,7 +447,7 @@ namespace TurnoDaNoite.Jogo
         static Vector3 LugarNoRecipiente(TipoRecipiente t) => t switch
         {
             TipoRecipiente.CaixaDeFerramentas => new Vector3(0, 0.30f, 0.02f),
-            TipoRecipiente.Gaveteiro => new Vector3(0, 0.56f, 0.30f),
+            TipoRecipiente.Gaveteiro => new Vector3(0, 0.42f, 0.26f),
             _ => new Vector3(-0.22f, 1.19f, 0.02f)
         };
 
@@ -840,7 +846,9 @@ namespace TurnoDaNoite.Jogo
                         no.Tampa.Rotation = new Vector3(-a * 1.9f, 0, 0);   // tampa cai para trás
                         break;
                     case TipoRecipiente.Gaveteiro:
-                        no.Tampa.Position = new Vector3(0, 0, a * 0.34f);   // gavetas saltam
+                        // 22 cm: com 34 a bandeja saia quase inteira do movel e
+                        // ficava pendurada no ar, sem nada segurando
+                        no.Tampa.Position = new Vector3(0, 0, a * 0.22f);
                         break;
                     default:
                         no.Tampa.Rotation = new Vector3(0, 0, a * 1.15f);   // a caixa tomba
