@@ -217,13 +217,38 @@ namespace TurnoDaNoite.Tests
             // Ela precisa ficar longe: se pegar o jogador, a simulacao congela e a
             // bateria para de drenar — foi assim que este teste falhou da primeira vez.
             var longe = p.Predio.ParaMundo(p.Predio.Sala(TipoSala.Tunel).Centro);
-            for (int s = 0; s < 120; s++)
+
+            void Correr(int segundos)
+            {
+                for (int s = 0; s < segundos; s++) { p.Ela.Pos = longe; p.Rodar(1f); }
+            }
+
+            // Dois minutos ainda tem luz: a lanterna durava 95 s e isso parecia
+            // defeito — você acendia, andava um pouco e ficava no escuro.
+            Correr(120);
+            Assert.True(p.Jogador.Lanterna, "a lanterna apagou cedo demais");
+            Assert.True(p.Jogador.Bateria > 0.4f, $"bateria caiu rápido demais: {p.Jogador.Bateria:0.00}");
+
+            // mas a escassez continua sendo mecânica: em cinco minutos acaba
+            Correr(200);
+            Assert.Equal(0f, p.Jogador.Bateria, 4);
+            Assert.False(p.Jogador.Lanterna);
+        }
+
+        [Fact]
+        public void LanternaDuraPerto_De_CincoMinutos()
+        {
+            var p = Ajuda.Nova();
+            var longe = p.Predio.ParaMundo(p.Predio.Sala(TipoSala.Tunel).Centro);
+
+            int segundos = 0;
+            while (p.Jogador.Lanterna && segundos < 600)
             {
                 p.Ela.Pos = longe;
                 p.Rodar(1f);
+                segundos++;
             }
-            Assert.Equal(0f, p.Jogador.Bateria, 4);
-            Assert.False(p.Jogador.Lanterna);
+            Assert.InRange(segundos, 240, 360);
         }
 
         [Fact]

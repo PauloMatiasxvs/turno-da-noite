@@ -9,7 +9,8 @@ namespace TurnoDaNoite.Jogo
     public enum Peca
     {
         Parede, Piso, Teto, Armario, QuadroEletrico, Portao,
-        Fusivel, Bateria, Criatura, Luminaria, Caixote, Barril, Cano
+        Fusivel, Bateria, Criatura, Luminaria, Caixote, Barril, Cano,
+        LanternaNaMao, Braco
     }
 
     /// <summary>
@@ -41,7 +42,9 @@ namespace TurnoDaNoite.Jogo
             { Peca.Luminaria,      "luminaria" },
             { Peca.Caixote,        "caixote" },
             { Peca.Barril,         "barril" },
-            { Peca.Cano,           "cano" }
+            { Peca.Cano,           "cano" },
+            { Peca.LanternaNaMao,  "lanterna_mao" },
+            { Peca.Braco,          "braco" }
         };
 
         static readonly string[] Extensoes = { ".glb", ".gltf", ".obj", ".fbx", ".tscn" };
@@ -135,8 +138,17 @@ namespace TurnoDaNoite.Jogo
         /// <summary>Formas provisórias. Feias de propósito: é para dar vontade de trocar.</summary>
         static Node3D Primitiva(Peca peca, Vector3 tamanho, Material material)
         {
+            // Peças da mão são cilindros deitados apontando para -Z, que é para
+            // onde a câmera olha. Como caixa, a lanterna parecia um tijolo.
+            bool naMao = peca is Peca.LanternaNaMao or Peca.Braco;
+
             Mesh malha = peca switch
             {
+                Peca.LanternaNaMao or Peca.Braco => new CylinderMesh
+                {
+                    TopRadius = tamanho.X / 2, BottomRadius = tamanho.X / 2,
+                    Height = tamanho.Z, RadialSegments = 12
+                },
                 Peca.Fusivel or Peca.Bateria => new BoxMesh { Size = tamanho },
                 Peca.Barril => new CylinderMesh
                 {
@@ -151,8 +163,11 @@ namespace TurnoDaNoite.Jogo
             };
 
             var mi = new MeshInstance3D { Mesh = malha, MaterialOverride = material };
-            if (peca is not (Peca.Piso or Peca.Teto))
+
+            if (naMao) mi.RotateX(Mathf.Pi / 2);              // deita o cilindro no eixo Z
+            else if (peca is not (Peca.Piso or Peca.Teto))
                 mi.Position = new Vector3(0, tamanho.Y / 2f, 0);
+
             return mi;
         }
 

@@ -23,8 +23,13 @@ namespace TurnoDaNoite.Core
         public const float FolegoMinimoParaCorrer = 0.08f;
         public const float FolegoOfegante = 0.45f;
 
-        /// <summary>Lanterna: ~95 segundos de luz contínua. Uma bateria devolve 45%.</summary>
-        public const float GastoBateria = 0.0105f;
+        /// <summary>
+        /// Lanterna: ~5 minutos de luz contínua. Estava em 95 segundos, o que na
+        /// prática parecia defeito — você acendia, andava um pouco e a luz morria
+        /// antes de dar tempo de achar qualquer coisa. A escassez continua sendo
+        /// mecânica, mas agora numa escala que dá para jogar.
+        /// </summary>
+        public const float GastoBateria = 0.0033f;
         public const float BateriaPorPilha = 0.45f;
 
         /// <summary>Ar preso no armário: ~3 s segurando, e recupera devagar.</summary>

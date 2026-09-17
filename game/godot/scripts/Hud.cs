@@ -35,7 +35,6 @@ namespace TurnoDaNoite.Jogo
             _objetivo.AnchorRight = 1;
             _objetivo.Position = new Vector2(0, 70);
             _objetivo.HorizontalAlignment = HorizontalAlignment.Center;
-            _objetivo.Size = new Vector2(900, 46);
 
             _dica = Texto(14, Osso);
             _dica.AnchorRight = 1; _dica.AnchorTop = 1; _dica.AnchorBottom = 1;

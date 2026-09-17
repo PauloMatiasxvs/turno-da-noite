@@ -19,6 +19,10 @@ namespace TurnoDaNoite.Jogo
         Hud _hud;
         Node3D _raizItens, _raizArmarios;
         Node3D _criatura;
+        Node3D _mao;
+        MeshInstance3D _vidroDaLanterna;
+        StandardMaterial3D _matVidro;
+        Vector2 _balancoDaMao;
         AnimationPlayer _animCriatura;
         string _clipeAtual = "";
         /// <summary>Se o modelo do artista olha para +Z em vez de -Z, isto vira Pi.</summary>
@@ -212,16 +216,21 @@ namespace TurnoDaNoite.Jogo
                 // Calibrado olhando captura de tela: com energia 9 a luz morria em
                 // dois metros. Em Godot a queda do holofote e agressiva, entao o
                 // valor util fica bem acima do que a intuicao sugere.
-                LightEnergy = 32f,
-                SpotRange = 30f,
-                SpotAngle = 34f,
-                SpotAngleAttenuation = 1.4f,
-                SpotAttenuation = 0.55f,
+                // Recalibrado depois que o Environment parou de comer a luz: com 32
+                // o facho virava um circulo branco estourado. Cone mais aberto e
+                // com borda macia parece lanterna, e nao holofote de estadio.
+                LightEnergy = 6.5f,
+                SpotRange = 26f,
+                SpotAngle = 43f,
+                SpotAngleAttenuation = 2.4f,
+                SpotAttenuation = 1.1f,
                 ShadowEnabled = !_semSombra,
                 ShadowBias = 0.06f,
                 ShadowNormalBias = 2.0f
             };
             _camera.AddChild(_lanterna);
+
+            MontarMaoComLanterna();
 
             // lampião fraco preso ao jogador, para o escuro total não virar tela preta
             _lampiao = new OmniLight3D
@@ -232,6 +241,77 @@ namespace TurnoDaNoite.Jogo
                 ShadowEnabled = false
             };
             _camera.AddChild(_lampiao);
+        }
+
+        /// <summary>
+        /// Braço e lanterna em primeira pessoa, presos à câmera.
+        ///
+        /// Duas armadilhas que este código evita de propósito:
+        /// a lanterna fica ADIANTE do holofote, senão o próprio corpo dela
+        /// bloqueia a luz e projeta uma sombra gigante na cena; e todas as
+        /// peças têm sombra desligada, pela mesma razão.
+        /// </summary>
+        void MontarMaoComLanterna()
+        {
+            _mao = new Node3D { Name = "MaoComLanterna" };
+            _camera.AddChild(_mao);
+            _mao.Position = new Vector3(0.21f, -0.17f, -0.46f);
+
+            var metal = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.16f, 0.16f, 0.18f),
+                Metallic = 0.7f, Roughness = 0.35f
+            };
+            var pele = new StandardMaterial3D
+            {
+                // manga escura de uniforme. Antes era 0.30,0.22,0.17 e sob a lanterna
+                // acendia rosa, parecendo uma tabua de madeira no canto da tela.
+                AlbedoColor = new Color(0.10f, 0.10f, 0.12f),
+                Roughness = 0.95f
+            };
+
+            var corpo = Props.Criar(Peca.LanternaNaMao, new Vector3(0.06f, 0.06f, 0.22f), metal);
+            corpo.Name = "Lanterna";
+            _mao.AddChild(corpo);
+
+            var braco = Props.Criar(Peca.Braco, new Vector3(0.065f, 0.065f, 0.26f), pele);
+            braco.Name = "Braco";
+            braco.Position = new Vector3(0.035f, -0.075f, 0.15f);
+            braco.RotateX(Mathf.DegToRad(-12));
+            _mao.AddChild(braco);
+
+            // vidro da frente: acende junto com a luz e some quando ela apaga
+            _vidroDaLanterna = new MeshInstance3D
+            {
+                Mesh = new CylinderMesh
+                {
+                    TopRadius = 0.028f, BottomRadius = 0.022f, Height = 0.03f, RadialSegments = 12
+                },
+                Position = new Vector3(0, 0, -0.12f)
+            };
+            _vidroDaLanterna.RotateX(Mathf.Pi / 2);
+            _mao.AddChild(_vidroDaLanterna);
+
+            _matVidro = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(1f, 0.93f, 0.78f),
+                EmissionEnabled = true,
+                Emission = new Color(1f, 0.93f, 0.78f),
+                EmissionEnergyMultiplier = 1.4f
+            };
+            _vidroDaLanterna.MaterialOverride = _matVidro;
+
+            // nada na mão projeta sombra: o holofote está atrás dela
+            foreach (var n in TodosOsNos(_mao))
+                if (n is GeometryInstance3D g)
+                    g.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+        }
+
+        static System.Collections.Generic.IEnumerable<Node> TodosOsNos(Node raiz)
+        {
+            yield return raiz;
+            foreach (var f in raiz.GetChildren())
+                foreach (var n in TodosOsNos(f)) yield return n;
         }
 
         void MontarPredio()
@@ -541,7 +621,24 @@ namespace TurnoDaNoite.Jogo
             _camera.Position = new Vector3(j.Pos.X, j.AlturaOlho + sobe + tremor, j.Pos.Z);
             _camera.Rotation = new Vector3(_inclinacao, _giro, Mathf.Cos(_balanco * 0.5f) * 0.006f);
 
+            // o holofote fica um pouco a frente da mao, para o corpo da lanterna
+            // nao tapar a propria luz
+            _lanterna.Position = new Vector3(0.26f, -0.20f, -0.5f);
             _lanterna.Visible = j.LuzAcesa;
+
+            // braco e lanterna acompanham o passo e demoram a seguir a mira,
+            // que e o que faz parecer peso na mao em vez de adesivo na tela
+            if (_mao != null)
+            {
+                float alvoX = Mathf.Sin(_balanco) * 0.012f;
+                float alvoY = Mathf.Abs(Mathf.Cos(_balanco)) * 0.010f;
+                _balancoDaMao = _balancoDaMao.Lerp(new Vector2(alvoX, alvoY), Mathf.Min(1f, dt * 8f));
+                _mao.Position = new Vector3(0.21f + _balancoDaMao.X, -0.17f + _balancoDaMao.Y, -0.46f);
+                _mao.Rotation = new Vector3(_balancoDaMao.Y * 2.5f, -_balancoDaMao.X * 3f, 0);
+                _mao.Visible = !j.Escondido;
+                if (_matVidro != null)
+                    _matVidro.EmissionEnergyMultiplier = j.LuzAcesa ? 1.4f * Mathf.Clamp(j.Bateria * 3f, 0.3f, 1f) : 0f;
+            }
             // a luz fraqueja junto com a bateria: avisa antes de apagar
             if (!_forcarLuz) _lanterna.LightEnergy = 32f * Mathf.Clamp(j.Bateria * 3f, 0.25f, 1f);
             _camera.Fov = j.Correndo ? 80 : 74;
