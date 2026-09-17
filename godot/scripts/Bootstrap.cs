@@ -171,7 +171,10 @@ namespace NeonArena.GodotGame
             if (Input.IsKeyPressed(Key.A)) fx -= 1f;
 
             float sin = Mathf.Sin(_yaw), cos = Mathf.Cos(_yaw);
-            float worldX = fx * cos - fz * sin;
+            // sinal do segundo termo estava trocado e espelhava o movimento:
+            // W andava para tras olhando para leste ou oeste. A versao testada
+            // desta conta esta em game/core/Direcao.cs
+            float worldX = fx * cos + fz * sin;
             float worldZ = -fx * sin + fz * cos;
 
             var input = new InputFrame

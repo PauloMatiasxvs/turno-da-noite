@@ -87,8 +87,17 @@ namespace TurnoDaNoite.Jogo
             return (fundo, barra);
         }
 
-        public void Atualizar(Partida p)
+        public void Atualizar(Partida p, bool pausado = false)
         {
+            if (pausado)
+            {
+                // Sem este aviso o Esc parecia não fazer nada: o mouse era
+                // liberado e mais nada mudava na tela.
+                _centro.Text = "PAUSADO\n\nESC — voltar ao jogo\nQ — sair do jogo\nF5 — recomeçar\n\n- e =  ajustam a sensibilidade do mouse";
+                _centro.AddThemeColorOverride("font_color", Osso);
+                return;
+            }
+
             // abertura: o preto some devagar, o jogo nasce do escuro
             if (_escuro.Color.A > 0)
                 _escuro.Color = new Color(0, 0, 0, Mathf.Max(0, _escuro.Color.A - 0.006f));

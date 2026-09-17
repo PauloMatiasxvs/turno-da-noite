@@ -234,7 +234,9 @@ namespace NeonArena.Unity
             float sin = Mathf.Sin(_yaw), cos = Mathf.Cos(_yaw);
             var input = new InputFrame
             {
-                MoveX = fx * cos - fz * sin,
+                // sinal trocado espelhava o movimento: W ia para tras em metade
+                // das direcoes. Versao testada em game/core/Direcao.cs
+                MoveX = fx * cos + fz * sin,
                 MoveZ = -fx * sin + fz * cos,
                 Yaw = _yaw,
                 Pitch = _pitch,

@@ -32,6 +32,7 @@ namespace TurnoDaNoite.Jogo
 
         float _giro, _inclinacao;
         bool _mouseCapturado;
+        bool _pausado;
         bool _interagirPedido, _lanternaPedida;
         float _balanco;
 
@@ -351,27 +352,46 @@ namespace TurnoDaNoite.Jogo
             Input.MouseMode = capturar ? Input.MouseModeEnum.Captured : Input.MouseModeEnum.Visible;
         }
 
-        public override void _UnhandledInput(InputEvent e)
+        /// <summary>
+        /// Em _Input, e não em _UnhandledInput: aqui a tecla chega sempre, antes
+        /// de qualquer nó da interface ter chance de engolir o evento. Foi por
+        /// isso que o Esc "não fazia nada" e o jogador ficava preso no jogo.
+        /// </summary>
+        public override void _Input(InputEvent e)
         {
-            if (e is InputEventMouseMotion mm && _mouseCapturado)
+            if (e is InputEventMouseMotion mm && _mouseCapturado && !_pausado)
             {
                 _giro -= mm.Relative.X * Opcoes.Sensibilidade;
-                _inclinacao = Mathf.Clamp(_inclinacao - mm.Relative.Y * Opcoes.Sensibilidade * (Opcoes.InverterY ? -1 : 1), -1.4f, 1.4f);
+                _inclinacao = Mathf.Clamp(
+                    _inclinacao - mm.Relative.Y * Opcoes.Sensibilidade * (Opcoes.InverterY ? -1 : 1),
+                    -1.4f, 1.4f);
+                return;
             }
-            else if (e is InputEventKey k && k.Pressed && !k.Echo)
+
+            if (e is InputEventKey k && k.Pressed && !k.Echo)
             {
                 switch (k.Keycode)
                 {
-                    case Key.Escape: CapturarMouse(!_mouseCapturado); break;
-                    case Key.E: _interagirPedido = true; break;
-                    case Key.F: _lanternaPedida = true; break;
+                    case Key.Escape: AlternarPausa(); break;
+                    // sair de verdade. Sem isto só restava Alt+F4, e ninguém
+                    // deveria precisar descobrir isso sozinho.
+                    case Key.Q: if (_pausado) GetTree().Quit(); break;
+                    case Key.E: if (!_pausado) _interagirPedido = true; break;
+                    case Key.F: if (!_pausado) _lanternaPedida = true; break;
                     case Key.Minus: Opcoes.AjustarSensibilidade(-1); break;
                     case Key.Equal: Opcoes.AjustarSensibilidade(1); break;
-                    case Key.F5: if (_partida.Fase != Fase.Jogando) GetTree().ReloadCurrentScene(); break;
+                    case Key.F5: GetTree().ReloadCurrentScene(); break;
                 }
+                return;
             }
-            else if (e is InputEventMouseButton mb && mb.Pressed && !_mouseCapturado)
-                CapturarMouse(true);
+
+            if (e is InputEventMouseButton mb && mb.Pressed && _pausado) AlternarPausa();
+        }
+
+        void AlternarPausa()
+        {
+            _pausado = !_pausado;
+            CapturarMouse(!_pausado);
         }
 
         Comando LerComando()
@@ -382,12 +402,13 @@ namespace TurnoDaNoite.Jogo
             if (Input.IsKeyPressed(Key.D)) fx += 1;
             if (Input.IsKeyPressed(Key.A)) fx -= 1;
 
-            // leva o eixo local para o mundo girando pelo yaw
-            float sin = Mathf.Sin(_giro), cos = Mathf.Cos(_giro);
+            // A conversão mora no núcleo e tem teste: escrita à mão aqui, um
+            // sinal trocado fazia o W andar para trás em metade das direções.
+            var mundo = Direcao.LocalParaMundo(fx, fz, _giro);
             var cmd = new Comando
             {
-                FrenteX = fx * cos - fz * sin,
-                FrenteZ = -fx * sin + fz * cos,
+                FrenteX = mundo.X,
+                FrenteZ = mundo.Z,
                 Giro = _giro,
                 Inclinacao = _inclinacao,
                 Correr = Input.IsKeyPressed(Key.Shift),
@@ -442,7 +463,7 @@ namespace TurnoDaNoite.Jogo
                 return;
             }
 
-            if (_partida.Fase == Fase.Jogando)
+            if (_partida.Fase == Fase.Jogando && !_pausado)
             {
                 _partida.Passo(dt, LerComando());
                 foreach (var ev in _partida.Eventos) Som.Tocar(this, ev, _partida);
@@ -451,7 +472,7 @@ namespace TurnoDaNoite.Jogo
             SincronizarCamera(dt);
             SincronizarItens(dt);
             SincronizarCriatura(dt);
-            _hud.Atualizar(_partida);
+            _hud.Atualizar(_partida, _pausado);
         }
 
         void SincronizarCamera(float dt)
