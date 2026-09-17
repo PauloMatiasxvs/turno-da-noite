@@ -12,7 +12,8 @@ namespace TurnoDaNoite.Core
         Passo, PassoDela, Respiracao, Ofegante, Batida,
         PegouFusivel, PegouBateria, InstalouFusivel, EnergiaVoltou,
         AbriuArmario, FechouArmario, LanternaLigou, LanternaApagou,
-        ElaViuVoce, ElaRugiu, ElaArranhou, VocePegou, VoceEscapou, PortaoTrancado
+        ElaViuVoce, ElaRugiu, ElaArranhou, VocePegou, VoceEscapou, PortaoTrancado,
+        PortaoBateu
     }
 
     public struct Comando
@@ -96,6 +97,7 @@ namespace TurnoDaNoite.Core
         public P2 UltimoSomDela { get; private set; }
 
         readonly Random _rng;
+        bool _portaBateu;
         float _tempoPasso, _tempoRespiracao, _tempoBatida;
 
         public Partida(int semente = 0)
@@ -126,35 +128,40 @@ namespace TurnoDaNoite.Core
         {
             Fusiveis.Clear(); Baterias.Clear(); Armarios.Clear(); Eventos.Clear();
 
-            var portaria = Predio.Sala(TipoSala.Portaria);
-            Jogador.Pos = Predio.ParaMundo(portaria.Centro);
+            // Comeca do lado de fora. Entrar no predio pela porta da frente e a
+            // primeira coisa que voce faz, e da peso ao momento em que ela bate.
+            var patio = Predio.Sala(TipoSala.Patio);
+            Jogador.Pos = Predio.ParaMundo(patio.Centro);
             Jogador.Giro = 0; Jogador.Inclinacao = 0;
             Jogador.Folego = 1; Jogador.Bateria = 1; Jogador.Ar = 1;
             Jogador.Lanterna = true; Jogador.Escondido = false;
             Jogador.FusiveisNaMao = 0; Jogador.FusiveisInstalados = 0;
             Jogador.Medo = 0;
 
-            Portao = Predio.ParaMundo(new Celula(portaria.X + 1, portaria.Z + 2));
-            PortaoAberto = false;
+            Portao = Predio.ParaMundo(new Celula(Predio.PortaX + 1, Predio.PortaZ));
+            PortaoAberto = true;    // aberta: e por ela que voce entra
+            _portaBateu = false;
             Quadro = Predio.ParaMundo(Predio.Sala(TipoSala.Quadro).Centro);
 
             // um fusível por sala, nunca na portaria nem no quadro
             var candidatas = new List<Sala>();
             foreach (var s in Predio.Salas)
-                if (s.Tipo != TipoSala.Portaria && s.Tipo != TipoSala.Quadro) candidatas.Add(s);
+                if (s.Tipo != TipoSala.Portaria && s.Tipo != TipoSala.Quadro && s.Tipo != TipoSala.Patio)
+                    candidatas.Add(s);
             Embaralhar(candidatas);
 
             for (int i = 0; i < Regras.FusiveisNecessarios && i < candidatas.Count; i++)
                 Fusiveis.Add(new Item { Pos = Predio.ParaMundo(Predio.PontoLivre(candidatas[i], _rng)) });
 
-            var paraBateria = new List<Sala>(Predio.Salas);
+            var paraBateria = new List<Sala>();
+            foreach (var s in Predio.Salas) if (s.Tipo != TipoSala.Patio) paraBateria.Add(s);
             Embaralhar(paraBateria);
             for (int i = 0; i < Regras.BateriasNoMapa && i < paraBateria.Count; i++)
                 Baterias.Add(new Item { Pos = Predio.ParaMundo(Predio.PontoLivre(paraBateria[i], _rng)) });
 
             foreach (var s in Predio.Salas)
             {
-                if (s.Tipo == TipoSala.Portaria) continue;
+                if (s.Tipo == TipoSala.Portaria || s.Tipo == TipoSala.Patio) continue;
                 for (int k = 0; k < Regras.ArmariosPorSala; k++)
                     Armarios.Add(new Armario { Pos = Predio.ParaMundo(Predio.PontoLivre(s, _rng, 0)) });
             }
@@ -339,6 +346,16 @@ namespace TurnoDaNoite.Core
                     ((Item)obj).Recolhido = true;
                     Jogador.FusiveisNaMao++;
                     Eventos.Add(Evento.PegouFusivel);
+
+                    // O primeiro fusível fecha a porta da frente. É o momento em
+                    // que o passeio vira prisão, e o barulho denuncia onde você está.
+                    if (!_portaBateu)
+                    {
+                        _portaBateu = true;
+                        PortaoAberto = false;
+                        Eventos.Add(Evento.PortaoBateu);
+                        FazerBarulho(Regras.RuidoQuadro);
+                    }
                     break;
 
                 case Alvo.Bateria:
@@ -369,7 +386,9 @@ namespace TurnoDaNoite.Core
                     break;
 
                 case Alvo.Portao:
-                    if (PortaoAberto)
+                    // Sair exige os cinco instalados, mesmo que a porta ainda
+                    // esteja aberta no comeco: senao dava para "vencer" sem entrar.
+                    if (Jogador.FusiveisInstalados >= Regras.FusiveisNecessarios)
                     {
                         Fase = Fase.Escapou;
                         Eventos.Add(Evento.VoceEscapou);
@@ -514,7 +533,10 @@ namespace TurnoDaNoite.Core
             }
             else
             {
-                var sala = Predio.Salas[_rng.Next(Predio.Salas.Count)];
+                // patrulha so dentro do predio: o patio e do lado de fora
+                Sala sala;
+                do { sala = Predio.Salas[_rng.Next(Predio.Salas.Count)]; }
+                while (sala.Tipo == TipoSala.Patio);
                 destino = Predio.PontoLivre(sala, _rng);
             }
 

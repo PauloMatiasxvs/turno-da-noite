@@ -28,7 +28,7 @@ namespace TurnoDaNoite.Core
         public bool Equals(Celula o) => Cx == o.Cx && Cz == o.Cz;
     }
 
-    public enum TipoSala { Portaria, Maquinas, Deposito, Escritorio, Vestiario, Galpao, Quadro, Tunel, Camara }
+    public enum TipoSala { Portaria, Maquinas, Deposito, Escritorio, Vestiario, Galpao, Quadro, Tunel, Camara, Patio }
 
     public sealed class Sala
     {
@@ -52,6 +52,11 @@ namespace TurnoDaNoite.Core
         public const float PeDireito = 3.4f;
         public const float AlturaPasso = 0.4f;
 
+        /// <summary>Onde fica o vao da porta de entrada, em celulas.</summary>
+        public const int PortaX = 5;
+        public const int PortaLargura = 3;
+        public const int PortaZ = 34;
+
         public int Largura { get; }
         public int Profundidade { get; }
         public IReadOnlyList<Sala> Salas => _salas;
@@ -59,7 +64,9 @@ namespace TurnoDaNoite.Core
         readonly byte[] _grade;
         readonly List<Sala> _salas = new();
 
-        public Predio(int largura = 44, int profundidade = 36)
+        /// <summary>Profundidade 40 e nao 36: as quatro fileiras extras sao o patio
+        /// externo, onde o jogador comeca. Entrar no predio e parte do jogo.</summary>
+        public Predio(int largura = 44, int profundidade = 40)
         {
             Largura = largura;
             Profundidade = profundidade;
@@ -96,6 +103,7 @@ namespace TurnoDaNoite.Core
             Add(TipoSala.Quadro,     "quadro elétrico", 17, 5,  12, 7);
             Add(TipoSala.Tunel,      "túnel norte",     32, 5,  8,  6);
             Add(TipoSala.Camara,     "câmara fria",     3,  4,  10, 7);
+            Add(TipoSala.Patio,      "pátio externo",   3,  35, 8,  4);
 
             foreach (var s in _salas) Escavar(s.X, s.Z, s.Larg, s.Alt);
 
@@ -112,6 +120,10 @@ namespace TurnoDaNoite.Core
             };
             foreach (var (a, b) in ligacoes)
                 Corredor(Sala(a).Centro, Sala(b).Centro, 3);
+
+            // A porta de entrada: um vao de tres celulas na parede sul da portaria.
+            // E por aqui que voce entra no predio, e e aqui que ele te tranca.
+            for (int cx = PortaX; cx < PortaX + PortaLargura; cx++) _grade[34 * Largura + cx] = 0;
 
             // moldura sólida: ninguém escapa pela borda
             for (int i = 0; i < Largura; i++) { _grade[i] = 1; _grade[(Profundidade - 1) * Largura + i] = 1; }

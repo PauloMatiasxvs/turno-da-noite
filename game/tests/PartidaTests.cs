@@ -50,7 +50,10 @@ namespace TurnoDaNoite.Tests
         public void NoveSalasComNomes()
         {
             var p = Ajuda.Nova();
-            Assert.Equal(9, p.Predio.Salas.Count);
+            // 10 com o patio externo, que entrou quando o jogo passou a comecar
+            // do lado de fora e voce precisar entrar no predio
+            Assert.Equal(10, p.Predio.Salas.Count);
+            Assert.NotNull(p.Predio.Sala(TipoSala.Patio));
             foreach (var s in p.Predio.Salas) Assert.False(string.IsNullOrWhiteSpace(s.Nome));
         }
 
@@ -318,7 +321,9 @@ namespace TurnoDaNoite.Tests
             p.Jogador.Pos = p.Quadro;
             p.Interagir();
             Assert.Equal(0, p.Jogador.FusiveisInstalados);
-            Assert.False(p.PortaoAberto);
+            // a porta comeca ABERTA agora: voce entra por ela. O que impede de
+            // vencer nao e a porta, e a falta dos cinco fusiveis instalados.
+            Assert.NotEqual(Fase.Escapou, p.Fase);
         }
 
         [Fact]

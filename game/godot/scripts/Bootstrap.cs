@@ -38,6 +38,7 @@ namespace TurnoDaNoite.Jogo
         bool _mouseCapturado;
         bool _pausado;
         bool _naAbertura;
+        Menu _menu;
         bool _interagirPedido, _lanternaPedida;
         float _balanco;
 
@@ -87,10 +88,16 @@ namespace TurnoDaNoite.Jogo
             _hud = new Hud();
             AddChild(_hud);
 
-            // Abre explicando o objetivo. Sem isto a pessoa cai no escuro sem
-            // saber o que fazer, que foi exatamente o que aconteceu.
-            _naAbertura = !_autoTeste && !_tirarFoto;
-            if (_naAbertura) _hud.MostrarAbertura();
+            // Abre no menu, com historia e opcoes. Sem isto a pessoa cai no escuro
+            // sem saber o que fazer, que foi exatamente o que aconteceu.
+            // no modo captura o menu tambem aparece: e preciso poder olhar para ele
+            _naAbertura = !_autoTeste;
+            if (_naAbertura)
+            {
+                _menu = new Menu();
+                _menu.AoComecar += () => { _naAbertura = false; CapturarMouse(true); };
+                AddChild(_menu);
+            }
 
             CapturarMouse(!_autoTeste && !_naAbertura);
         }
@@ -324,8 +331,12 @@ namespace TurnoDaNoite.Jogo
             var piso = Props.Criar(Peca.Piso, new Vector3(lado, 0.1f, lado), _matPiso);
             raiz.AddChild(piso);
 
-            var teto = Props.Criar(Peca.Teto, new Vector3(lado, 0.1f, lado), _matTeto);
-            teto.Position = new Vector3(0, Predio.PeDireito, 0);
+            // O teto cobre so o predio: o patio externo tem de ficar sob o ceu,
+            // senao "entrar no predio" nao se distingue de andar num corredor.
+            float ateAPorta = (Predio.PortaZ - _partida.Predio.Profundidade / 2f + 0.5f) * Predio.Celula;
+            float comprimentoDoTeto = ateAPorta + lado / 2f;
+            var teto = Props.Criar(Peca.Teto, new Vector3(lado, 0.1f, comprimentoDoTeto), _matTeto);
+            teto.Position = new Vector3(0, Predio.PeDireito, ateAPorta - comprimentoDoTeto / 2f);
             teto.RotateZ(Mathf.Pi);   // vira a face para baixo
             raiz.AddChild(teto);
 
@@ -458,7 +469,7 @@ namespace TurnoDaNoite.Jogo
             {
                 switch (k.Keycode)
                 {
-                    case Key.Escape: if (_naAbertura) { _naAbertura = false; CapturarMouse(true); } else AlternarPausa(); break;
+                    case Key.Escape: if (_naAbertura) _menu?.Avancar(); else AlternarPausa(); break;
                     // sair de verdade. Sem isto só restava Alt+F4, e ninguém
                     // deveria precisar descobrir isso sozinho.
                     case Key.Q: if (_pausado) GetTree().Quit(); break;
@@ -473,7 +484,7 @@ namespace TurnoDaNoite.Jogo
 
             if (e is InputEventMouseButton mb && mb.Pressed)
             {
-                if (_naAbertura) { _naAbertura = false; CapturarMouse(true); }
+                if (_naAbertura) { if (_menu != null && _menu.NaHistoria) _menu.Avancar(); }
                 else if (_pausado) AlternarPausa();
             }
         }
@@ -567,8 +578,7 @@ namespace TurnoDaNoite.Jogo
             {
                 // deixa a partida andar um pouco para a criatura sair do lugar,
                 // e gira a câmera devagar para não fotografar sempre a mesma parede
-                _partida.Passo(1f / 60f, new Comando());
-                _giro += dt * 0.35f;
+                if (!_naAbertura) { _partida.Passo(1f / 60f, new Comando()); _giro += dt * 0.35f; }
                 _inclinacao = -0.14f;   // olha um pouco para baixo: mostra chao e parede
                 _quadrosDeFoto++;
                 SincronizarCamera(dt);
@@ -591,6 +601,9 @@ namespace TurnoDaNoite.Jogo
                     GD.Print($"material parede: albedo={_matParede.AlbedoColor} textura={(_matParede.AlbedoTexture != null ? "sim" : "nao")}");
                 }
                 if (_quadrosDeFoto == 150) TirarFoto("res://captura_1.png");
+                // depois da foto do menu, dispensa ele e fotografa o jogo
+                if (_quadrosDeFoto == 160 && _menu != null)
+                    for (int k = 0; k < 6; k++) _menu.Avancar();
                 if (_quadrosDeFoto == 330) TirarFoto("res://captura_2.png");
                 if (_quadrosDeFoto >= 340) GetTree().Quit();
                 return;

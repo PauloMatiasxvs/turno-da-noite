@@ -49,6 +49,13 @@ namespace TurnoDaNoite.Jogo
 
         public static int Porcentagem => Mathf.RoundToInt(Sensibilidade / SensPadrao * 100f);
 
+        /// <summary>Define direto, para o deslizante da tela de opcoes.</summary>
+        public static void DefinirSensibilidade(float v)
+        {
+            Sensibilidade = Mathf.Clamp(v, SensMin, SensMax);
+            Salvar();
+        }
+
         public static void DefinirVolume(float v)
         {
             Volume = Mathf.Clamp(v, 0f, 1f);

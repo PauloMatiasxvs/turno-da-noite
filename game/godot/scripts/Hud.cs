@@ -136,8 +136,10 @@ namespace TurnoDaNoite.Jogo
             // Objetivo explícito, e em duas linhas: o que fazer agora e onde você está.
             // "ACHE CINCO FUSÍVEIS" sozinho não diz o que fazer depois de achá-los.
             string tarefa;
-            if (p.PortaoAberto)
-                tarefa = "ENERGIA RESTABELECIDA — VOLTE AO PORTÃO, NA PORTARIA";
+            // Usa os fusiveis instalados, e nao PortaoAberto: a porta agora comeca
+            // aberta (voce entra por ela), entao ela nao diz mais nada sobre progresso.
+            if (j.FusiveisInstalados >= Regras.FusiveisNecessarios)
+                tarefa = "ENERGIA RESTABELECIDA — VOLTE À PORTA DA FRENTE";
             else if (j.FusiveisNaMao > 0)
                 tarefa = $"LEVE OS {j.FusiveisNaMao} FUSÍVEIS AO QUADRO ELÉTRICO";
             else if (j.FusiveisInstalados > 0)
@@ -182,7 +184,9 @@ namespace TurnoDaNoite.Jogo
                 Partida.Alvo.Quadro => p.Jogador.FusiveisNaMao > 0
                     ? "E — instalar fusíveis"
                     : "o quadro está vazio",
-                Partida.Alvo.Portao => p.PortaoAberto ? "E — sair" : "trancado — falta energia",
+                Partida.Alvo.Portao => p.Jogador.FusiveisInstalados >= Regras.FusiveisNecessarios
+                    ? "E — sair daqui"
+                    : (p.PortaoAberto ? "porta da frente" : "trancada — falta energia"),
                 _ => ""
             };
         }
