@@ -21,6 +21,7 @@ namespace TurnoDaNoite.Jogo
         Node3D _criatura;
         Node3D _mao;
         MeshInstance3D _vidroDaLanterna;
+        DirectionalLight3D _luzDaMao;
         StandardMaterial3D _matVidro;
         Vector2 _balancoDaMao;
         AnimationPlayer _animCriatura;
@@ -282,6 +283,7 @@ namespace TurnoDaNoite.Jogo
             // A lanterna é o jogo: cone estreito, quente, com sombra.
             _lanterna = new SpotLight3D
             {
+                LightCullMask = CamadaDoMundo,
                 LightColor = new Color(1f, 0.93f, 0.78f),
                 // Calibrado olhando captura de tela: com energia 9 a luz morria em
                 // dois metros. Em Godot a queda do holofote e agressiva, entao o
@@ -307,6 +309,7 @@ namespace TurnoDaNoite.Jogo
             // lampião fraco preso ao jogador, para o escuro total não virar tela preta
             _lampiao = new OmniLight3D
             {
+                LightCullMask = CamadaDoMundo,
                 LightColor = new Color(0.35f, 0.40f, 0.55f),
                 LightEnergy = 1.6f,
                 OmniRange = 6f,
@@ -327,7 +330,10 @@ namespace TurnoDaNoite.Jogo
         {
             _mao = new Node3D { Name = "MaoComLanterna" };
             _camera.AddChild(_mao);
-            _mao.Position = new Vector3(0.21f, -0.17f, -0.46f);
+            // mais longe e mais para dentro do que estava: a 46 cm a manga tomava
+            // o canto inferior direito inteiro, e encostada na borda a mao saia
+            // cortada pela metade
+            _mao.Position = new Vector3(0.165f, -0.175f, -0.56f);
 
             // A mão inteira é uma peça só, montada em Modelos: dedos em volta do
             // tubo, cabeça cônica e manga. Antes eram dois cilindros soltos, e
@@ -348,10 +354,79 @@ namespace TurnoDaNoite.Jogo
             };
             _vidroDaLanterna.MaterialOverride = _matVidro;
 
-            // nada na mão projeta sombra: o holofote está atrás dela
+            // Nada na mao projeta sombra, e tudo nela sai da camada do mundo e vai
+            // para a CAMADA 2, sozinha. Isso desliga TODA a luz do jogo sobre a
+            // mao — inclusive o proprio facho, que ao ser afastada a mao passou
+            // a bater nela a dez centimetros e a deixava branca. Quem ilumina a
+            // mao agora sao so as duas luzes de preenchimento abaixo.
             foreach (var n in TodosOsNos(_mao))
                 if (n is GeometryInstance3D g)
+                {
                     g.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+                    g.Layers = CamadaDaMao;
+                }
+
+            CriarLuzDaMao();
+        }
+
+        /// <summary>
+        /// Camadas de renderizacao. O mundo inteiro vive na 1; a mao, sozinha,
+        /// na 2. Toda luz do jogo enxerga so a 1, e as duas luzes de
+        /// preenchimento da mao enxergam so a 2.
+        ///
+        /// Nao basta mudar a camada da mao: luz em Godot nasce com mascara
+        /// "todas as camadas", entao o facho continuava batendo nela mesmo
+        /// depois de separada — foi por isso que baixar a energia da luz de
+        /// preenchimento nao mudou nada na tela.
+        /// </summary>
+        const uint CamadaDoMundo = 1 << 0;
+        const uint CamadaDaMao = 1 << 1;
+
+        /// <summary>
+        /// A luz que dá forma à mão, e só a ela.
+        ///
+        /// O problema: o holofote da lanterna aponta para a FRENTE, então a mão
+        /// que o segura fica nas costas dele, recebendo só a luz ambiente — que
+        /// é azulada e não vem de direção nenhuma. Sem direção não há sombra
+        /// própria, e sem sombra própria a mão vira um borrão chapado onde não
+        /// se distingue dedo de cano.
+        ///
+        /// A tentativa óbvia — uma luz pontual na cabeça da lanterna — é pior:
+        /// a cinco centímetros dos dedos qualquer energia estoura, e eles saem
+        /// brancos. Luz direcional não tem queda com a distância, então não
+        /// estoura nada; o que faltava era impedir que ela iluminasse o prédio
+        /// inteiro. Daí a máscara: a mão está na camada 2, esta luz enxerga só
+        /// a camada 2, e nada mais no jogo está lá.
+        /// </summary>
+        void CriarLuzDaMao()
+        {
+            var fill = new DirectionalLight3D
+            {
+                Name = "LuzDaMao",
+                LightColor = new Color(1f, 0.94f, 0.86f),
+                // 1,35 dava cinza medio num albedo de 0,10: com exposicao filmica
+                // a conta e mais generosa do que a intuicao sugere
+                LightEnergy = 0.58f,
+                ShadowEnabled = false,
+                LightCullMask = CamadaDaMao
+            };
+            // de cima, da esquerda e um pouco de trás: é a direção que separa
+            // o dorso dos dedos e deixa o lado de baixo na sombra
+            fill.RotationDegrees = new Vector3(-38f, 28f, 0f);
+            _camera.AddChild(fill);
+            _luzDaMao = fill;
+
+            // um respingo bem fraco por baixo, para o lado escuro não sumir
+            var contra = new DirectionalLight3D
+            {
+                Name = "ContraLuzDaMao",
+                LightColor = new Color(0.62f, 0.68f, 0.85f),
+                LightEnergy = 0.15f,
+                ShadowEnabled = false,
+                LightCullMask = CamadaDaMao
+            };
+            contra.RotationDegrees = new Vector3(34f, -140f, 0f);
+            _camera.AddChild(contra);
         }
 
         static System.Collections.Generic.IEnumerable<Node> TodosOsNos(Node raiz)
@@ -423,6 +498,7 @@ namespace TurnoDaNoite.Jogo
                 {
                     var luz = new OmniLight3D
                     {
+                        LightCullMask = CamadaDoMundo,
                         LightColor = new Color(1f, 0.55f, 0.25f),
                         LightEnergy = 0.9f,
                         OmniRange = 9f,
@@ -1093,11 +1169,15 @@ namespace TurnoDaNoite.Jogo
                 float alvoX = Mathf.Sin(_balanco) * 0.012f;
                 float alvoY = Mathf.Abs(Mathf.Cos(_balanco)) * 0.010f;
                 _balancoDaMao = _balancoDaMao.Lerp(new Vector2(alvoX, alvoY), Mathf.Min(1f, dt * 8f));
-                _mao.Position = new Vector3(0.21f + _balancoDaMao.X, -0.17f + _balancoDaMao.Y, -0.46f);
+                _mao.Position = new Vector3(0.165f + _balancoDaMao.X, -0.175f + _balancoDaMao.Y, -0.56f);
                 _mao.Rotation = new Vector3(_balancoDaMao.Y * 2.5f, -_balancoDaMao.X * 3f, 0);
                 _mao.Visible = !j.Escondido;
                 if (_matVidro != null)
                     _matVidro.EmissionEnergyMultiplier = j.LuzAcesa ? 1.4f * Mathf.Clamp(j.Bateria * 3f, 0.3f, 1f) : 0f;
+                // a luz de preenchimento da mao cai junto com a lanterna, mas
+                // nunca zera: no escuro voce ainda ve a propria mao, de relance
+                if (_luzDaMao != null)
+                    _luzDaMao.LightEnergy = j.LuzAcesa ? 0.58f : 0.14f;
             }
             // a luz fraqueja junto com a bateria: avisa antes de apagar
             if (!_forcarLuz)

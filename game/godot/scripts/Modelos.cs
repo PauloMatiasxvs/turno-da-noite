@@ -480,121 +480,169 @@ namespace TurnoDaNoite.Jogo
         // ------------------------------------------------------------ a mão
 
         /// <summary>
-        /// A mão segurando a lanterna, em primeira pessoa. É a única peça que
-        /// fica na tela o tempo todo, então é a que mais paga atenção ao detalhe:
-        /// enquanto era um cilindro liso, virava um cano escuro atravessando o
-        /// canto do quadro, e nenhum resto de cenário bonito compensava isso.
+        /// A mão segurando a lanterna, em primeira pessoa.
         ///
-        /// Os nós "Vidro" e "Corpo" saem nomeados porque quem chama precisa
-        /// acender um e não pode deixar nenhum projetar sombra.
+        /// É a única peça que fica na tela o tempo todo, então é a que mais
+        /// paga atenção ao detalhe. Já passou por duas versões ruins:
+        ///
+        /// 1. Dois cilindros lisos — o braço lia como um cano escuro
+        ///    atravessando o canto do quadro.
+        /// 2. Tudo da mesma cor e iluminado só pela luz ambiente, que é
+        ///    azulada e não vem de lugar nenhum. Sem uma fonte batendo nela,
+        ///    a mão não tinha forma: saía um borrão lilás chapado, em que não
+        ///    dava para separar dedo de cano nem de manga.
+        ///
+        /// Desta vez: materiais diferentes para luva, borracha, alumínio e
+        /// manga; dedos com duas falanges cada, em vez de argolas no tubo; e
+        /// uma luz fraca na cabeça da lanterna, que é o que acontece de
+        /// verdade quando se segura uma lanterna acesa.
+        ///
+        /// O nó "Vidro" sai nomeado porque quem chama acende ele junto com a
+        /// lanterna. A luz que dá forma à mão NÃO mora aqui: é uma luz de
+        /// preenchimento presa à câmera, em Bootstrap, que enxerga só a mão.
+        /// Tentei uma luz pontual na cabeça da lanterna e o resultado foi pior:
+        /// a cinco centímetros dos dedos, qualquer energia estoura, e eles
+        /// viravam cunhas brancas saltando do cano.
         /// </summary>
         public static Node3D MaoComLanterna()
         {
             var raiz = new Node3D();
 
-            var corpoMat = new StandardMaterial3D
+            // ---- materiais: todos escuros, e todos DIFERENTES entre si
+            var aluminio = new StandardMaterial3D
             {
-                AlbedoColor = new Color(0.14f, 0.15f, 0.17f), Metallic = 0.75f, Roughness = 0.32f
+                AlbedoColor = new Color(0.115f, 0.120f, 0.130f),
+                Metallic = 0.85f, Roughness = 0.34f
             };
-            var pegaMat = new StandardMaterial3D
+            var borracha = new StandardMaterial3D
             {
-                AlbedoColor = new Color(0.07f, 0.07f, 0.08f), Roughness = 0.9f
+                AlbedoColor = new Color(0.045f, 0.045f, 0.050f), Roughness = 0.93f
             };
-            var luvaMat = new StandardMaterial3D
+            var luva = new StandardMaterial3D
             {
-                AlbedoColor = new Color(0.13f, 0.12f, 0.12f), Roughness = 0.88f
+                // couro escuro puxado para o quente: a luva cinza-azulada
+                // sumia dentro da luz ambiente, que também é azulada
+                AlbedoColor = new Color(0.105f, 0.082f, 0.068f), Roughness = 0.88f
             };
-            var mangaMat = new StandardMaterial3D
+            var luvaVinco = new StandardMaterial3D
             {
-                AlbedoColor = new Color(0.09f, 0.10f, 0.12f), Roughness = 0.95f
+                AlbedoColor = new Color(0.062f, 0.048f, 0.040f), Roughness = 0.92f
+            };
+            var manga = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.068f, 0.070f, 0.066f), Roughness = 0.96f
             };
 
-            // ---- lanterna: tubo, pega emborrachada, cabeça cônica e aro
-            var corpo = new Node3D { Name = "Corpo" };
-
-            var tubo = Cilindro(0.026f, 0.21f, corpoMat, new Vector3(0, 0, -0.015f), 16);
+            // ---- a lanterna, em peças distintas
+            var tubo = Cilindro(0.024f, 0.155f, aluminio, new Vector3(0, 0, -0.045f), 18);
             tubo.RotateX(Mathf.Pi / 2);
-            corpo.AddChild(tubo);
+            raiz.AddChild(tubo);
 
-            var pega = Cilindro(0.029f, 0.075f, pegaMat, new Vector3(0, 0, 0.035f), 16);
+            // pega emborrachada com anéis: é o que dá escala ao objeto
+            var pega = Cilindro(0.027f, 0.075f, borracha, new Vector3(0, 0, 0.055f), 18);
             pega.RotateX(Mathf.Pi / 2);
-            corpo.AddChild(pega);
+            raiz.AddChild(pega);
+            for (int i = 0; i < 4; i++)
+            {
+                var anel = Cilindro(0.0285f, 0.007f, borracha,
+                                    new Vector3(0, 0, 0.026f + i * 0.019f), 18);
+                anel.RotateX(Mathf.Pi / 2);
+                raiz.AddChild(anel);
+            }
 
             var cabeca = new MeshInstance3D
             {
                 Mesh = new CylinderMesh
                 {
-                    TopRadius = 0.042f, BottomRadius = 0.027f, Height = 0.06f, RadialSegments = 16
+                    TopRadius = 0.040f, BottomRadius = 0.025f, Height = 0.055f, RadialSegments = 18
                 },
-                MaterialOverride = corpoMat,
-                Position = new Vector3(0, 0, -0.145f)
+                MaterialOverride = aluminio,
+                Position = new Vector3(0, 0, -0.150f)
             };
-            cabeca.RotateX(-Mathf.Pi / 2);      // a boca larga vira para a frente
-            corpo.AddChild(cabeca);
+            cabeca.RotateX(-Mathf.Pi / 2);
+            raiz.AddChild(cabeca);
 
-            var aro = Cilindro(0.044f, 0.012f, pegaMat, new Vector3(0, 0, -0.174f), 16);
+            var aro = Cilindro(0.042f, 0.010f, borracha, new Vector3(0, 0, -0.180f), 18);
             aro.RotateX(Mathf.Pi / 2);
-            corpo.AddChild(aro);
+            raiz.AddChild(aro);
 
-            // tampa de trás, para o tubo não terminar num buraco
-            var tampa = Cilindro(0.027f, 0.014f, pegaMat, new Vector3(0, 0, 0.082f), 16);
+            var tampa = Cilindro(0.026f, 0.012f, borracha, new Vector3(0, 0, 0.096f), 18);
             tampa.RotateX(Mathf.Pi / 2);
-            corpo.AddChild(tampa);
+            raiz.AddChild(tampa);
 
-            raiz.AddChild(corpo);
-
-            // ---- o vidro, que acende junto com a luz
+            // o vidro fica À FRENTE do aro: atrás dele virava um buraco preto
             var vidro = new MeshInstance3D
             {
                 Name = "Vidro",
                 Mesh = new CylinderMesh
                 {
-                    TopRadius = 0.036f, BottomRadius = 0.030f, Height = 0.014f, RadialSegments = 16
+                    TopRadius = 0.035f, BottomRadius = 0.030f, Height = 0.012f, RadialSegments = 18
                 },
-                // na frente do aro, e nao atras: escondido atras dele o vidro
-                // virava um buraco preto no meio da lanterna
-                Position = new Vector3(0, 0, -0.182f)
+                Position = new Vector3(0, 0, -0.188f)
             };
             vidro.RotateX(Mathf.Pi / 2);
             raiz.AddChild(vidro);
 
-            // ---- a mão: palma, quatro dedos por cima do tubo e o polegar do lado
-            var palma = Caixa(new Vector3(0.085f, 0.055f, 0.105f), luvaMat,
-                              new Vector3(0.012f, -0.030f, 0.040f));
-            palma.RotateY(0.12f);
-            raiz.AddChild(palma);
+            // ---- a mão: dorso, quatro dedos de duas falanges, polegar
+            var dorso = Caixa(new Vector3(0.028f, 0.062f, 0.098f), luva,
+                              new Vector3(0.026f, 0.006f, 0.030f));
+            dorso.RotateZ(-0.22f);
+            raiz.AddChild(dorso);
 
+            // Os nós dos dedos, em fileira no alto, são o que faz o olho
+            // reconhecer uma mão — sem eles era um tubo com argolas.
             for (int i = 0; i < 4; i++)
             {
-                float z = 0.005f + i * 0.026f;
-                float raio = 0.0115f - i * 0.0006f;
-                var dedo = Cilindro(raio, 0.072f, luvaMat, new Vector3(-0.004f, -0.006f, z), 8);
-                dedo.RotateZ(Mathf.Pi / 2);      // deita o dedo atravessado no tubo
-                dedo.RotateX(0.10f);
-                raiz.AddChild(dedo);
+                float z = 0.058f - i * 0.024f;
+                float escala = 1f - i * 0.07f;
+
+                raiz.AddChild(Esfera(0.0105f * escala, luva, new Vector3(0.019f, 0.016f, z)));
+
+                // Bem coladas no tubo. Afastadas, os dedos viravam cunhas
+                // saltando de dentro do cano em vez de agarrarem ele.
+                var falange1 = Cilindro(0.0090f * escala, 0.034f, luva,
+                                        new Vector3(0.003f, 0.018f, z), 8);
+                falange1.RotateZ(Mathf.Pi / 2);
+                falange1.RotateX(0.12f);
+                raiz.AddChild(falange1);
+
+                // a segunda falange dobra para o outro lado do tubo
+                var falange2 = Cilindro(0.0082f * escala, 0.026f, luvaVinco,
+                                        new Vector3(-0.016f, 0.005f, z), 8);
+                falange2.RotateZ(Mathf.Pi / 2 - 0.95f);
+                raiz.AddChild(falange2);
             }
 
-            var polegar = Cilindro(0.012f, 0.055f, luvaMat, new Vector3(0.030f, -0.022f, 0.015f), 8);
-            polegar.RotateX(Mathf.Pi / 2);
-            polegar.RotateZ(-0.45f);
-            raiz.AddChild(polegar);
+            var polegar1 = Cilindro(0.0125f, 0.040f, luva, new Vector3(0.034f, -0.012f, 0.050f), 8);
+            polegar1.RotateX(Mathf.Pi / 2);
+            polegar1.RotateY(-0.35f);
+            raiz.AddChild(polegar1);
 
-            // ---- punho e manga, saindo para baixo e para trás
-            var punho = Cilindro(0.040f, 0.040f, mangaMat, new Vector3(0.020f, -0.055f, 0.105f), 12);
-            punho.RotateX(Mathf.Pi / 2 - 0.5f);
+            var polegar2 = Cilindro(0.0105f, 0.038f, luva, new Vector3(0.030f, -0.016f, 0.014f), 8);
+            polegar2.RotateX(Mathf.Pi / 2);
+            polegar2.RotateY(-0.12f);
+            raiz.AddChild(polegar2);
+
+            // ---- punho, canhão da manga e antebraço
+            var punho = Cilindro(0.036f, 0.055f, luvaVinco, new Vector3(0.036f, -0.036f, 0.098f), 14);
+            punho.RotateX(Mathf.Pi / 2 - 0.42f);
             raiz.AddChild(punho);
 
-            var manga = new MeshInstance3D
+            var canhao = Cilindro(0.043f, 0.030f, manga, new Vector3(0.042f, -0.055f, 0.128f), 14);
+            canhao.RotateX(Mathf.Pi / 2 - 0.42f);
+            raiz.AddChild(canhao);
+
+            var antebraco = new MeshInstance3D
             {
                 Mesh = new CylinderMesh
                 {
-                    TopRadius = 0.040f, BottomRadius = 0.058f, Height = 0.26f, RadialSegments = 12
+                    TopRadius = 0.040f, BottomRadius = 0.056f, Height = 0.24f, RadialSegments = 14
                 },
-                MaterialOverride = mangaMat,
-                Position = new Vector3(0.036f, -0.120f, 0.215f)
+                MaterialOverride = manga,
+                Position = new Vector3(0.055f, -0.108f, 0.230f)
             };
-            manga.RotateX(Mathf.Pi / 2 - 0.5f);
-            raiz.AddChild(manga);
+            antebraco.RotateX(Mathf.Pi / 2 - 0.42f);
+            raiz.AddChild(antebraco);
 
             return raiz;
         }

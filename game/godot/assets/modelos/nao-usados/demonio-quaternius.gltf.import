@@ -4,12 +4,12 @@ importer="scene"
 importer_version=1
 type="PackedScene"
 uid="uid://n8k2lt7amopl"
-path="res://.godot/imported/criatura.gltf-4ee78daf23d0a98ce837dccffdee73de.scn"
+path="res://.godot/imported/demonio-quaternius.gltf-fd243171712c60c215eb9d737c13a9a2.scn"
 
 [deps]
 
-source_file="res://assets/modelos/criatura.gltf"
-dest_files=["res://.godot/imported/criatura.gltf-4ee78daf23d0a98ce837dccffdee73de.scn"]
+source_file="res://assets/modelos/nao-usados/demonio-quaternius.gltf"
+dest_files=["res://.godot/imported/demonio-quaternius.gltf-fd243171712c60c215eb9d737c13a9a2.scn"]
 
 [params]
 

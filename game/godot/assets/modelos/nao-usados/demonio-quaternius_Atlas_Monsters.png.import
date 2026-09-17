@@ -2,8 +2,8 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://u2esaxe34rko"
-path="res://.godot/imported/criatura_Atlas_Monsters.png-de0d1eb53ce1f982209c5271be6a6865.ctex"
+uid="uid://dho8toi4hhbup"
+path="res://.godot/imported/demonio-quaternius_Atlas_Monsters.png-1b54153128c43be06011699fd86fa0c3.ctex"
 metadata={
 "vram_texture": false
 }
@@ -13,8 +13,8 @@ generator_parameters={
 
 [deps]
 
-source_file="res://assets/modelos/nao-usados/criatura_Atlas_Monsters.png"
-dest_files=["res://.godot/imported/criatura_Atlas_Monsters.png-de0d1eb53ce1f982209c5271be6a6865.ctex"]
+source_file="res://assets/modelos/nao-usados/demonio-quaternius_Atlas_Monsters.png"
+dest_files=["res://.godot/imported/demonio-quaternius_Atlas_Monsters.png-1b54153128c43be06011699fd86fa0c3.ctex"]
 
 [params]
 
