@@ -139,7 +139,28 @@ namespace TurnoDaNoite.Core
         /// no mesmo ponto, um dentro do outro, e o de fora tomava a interação —
         /// o fusível do de dentro ficava impossível de pegar.
         /// </summary>
-        public const float EspacoEntreMoveis = 1.8f;
+        /// Subiu de 1,8 para 2,4 quando os móveis ganharam corpo: dois deles a
+        /// 1,8 m com meio metro de raio cada deixavam 80 cm de vão, e o jogador
+        /// tem 76 cm de largura. Passava raspando, ou não passava.
+        public const float EspacoEntreMoveis = 2.4f;
+
+        // ---------------- corpo dos móveis ----------------
+        // Raio de colisão, em metros. Círculo, não caixa: quem esbarra num
+        // círculo desliza, quem esbarra numa quina engancha.
+        public const float RaioArmario = 0.52f;
+        public const float RaioQuadro = 0.50f;
+        /// <summary>Raio dela contra móveis. Menor que o corpo: o caminho dela ignora mobília, então precisa caber espremendo.</summary>
+        public const float RaioCriaturaEmMoveis = 0.30f;
+        /// <summary>Altura dela, em metros. Mais alta que gente, e é para ser.</summary>
+        public const float AlturaDaCriatura = 2.35f;
+
+        public static float RaioDoRecipiente(TipoRecipiente t) => t switch
+        {
+            // caixa de ferramentas é baixa e pequena, mas você não passa por cima
+            TipoRecipiente.CaixaDeFerramentas => 0.32f,
+            TipoRecipiente.Gaveteiro => 0.42f,
+            _ => 0.58f    // prateleira: 1,3 m de frente
+        };
         public const float RaioInteracao = 2.4f;
         /// <summary>Distância mínima entre onde a criatura nasce e onde você nasce.</summary>
         public const float DistanciaInicialMinima = 28f;

@@ -121,6 +121,16 @@ namespace TurnoDaNoite.Core
         public List<Recipiente> Recipientes { get; } = new();
         /// <summary>Cenário: caixotes, tambores, bancadas, canos. Só os sólidos empurram.</summary>
         public List<Adorno> Adornos { get; private set; } = new();
+
+        /// <summary>
+        /// TUDO que ocupa chão: recipientes, armários, quadro e o cenário.
+        ///
+        /// Lista única porque a anterior não era: só o cenário empurrava, e os
+        /// móveis que o jogo pede para você usar — gaveteiro, prateleira,
+        /// armário — eram atravessáveis. Com uma lista só, esquecer de incluir
+        /// alguma coisa vira um teste que falha, e não um móvel fantasma.
+        /// </summary>
+        public List<Solido> Solidos { get; } = new();
         public P2 Quadro { get; private set; }
         /// <summary>O quadro fica no andar de cima: é o que obriga a escada a servir para alguma coisa.</summary>
         public int QuadroAndar { get; private set; }
@@ -206,6 +216,19 @@ namespace TurnoDaNoite.Core
             return false;
         }
 
+        /// <summary>
+        /// Empurra o móvel contra a parede da célula. O que sobra do outro
+        /// lado é por onde se anda, e é isso que impede a mobília de fechar
+        /// o cômodo agora que ela tem corpo.
+        /// </summary>
+        P2 EncostarNaParede(Celula c, P2 normal, float raio)
+        {
+            var m = Predio.ParaMundo(c);
+            float recuo = Predio.Celula / 2f - raio - 0.08f;
+            if (recuo < 0) recuo = 0;
+            return new P2(m.X + normal.X * recuo, m.Z + normal.Z * recuo);
+        }
+
         void Distribuir()
         {
             Fusiveis.Clear(); Baterias.Clear(); Armarios.Clear(); Eventos.Clear();
@@ -240,26 +263,23 @@ namespace TurnoDaNoite.Core
                 if (s.Tipo == TipoSala.Patio) continue;
                 if (_rng.NextDouble() > Regras.FracaoDeSalasComRecipiente) continue;
 
-                for (int k = 0; k < Regras.RecipientesPorSala; k++)
-                {
-                    // PontoLivre sorteia uma célula qualquer da sala, e sorteio
-                    // repete: dois recipientes saíram no mesmo ponto, um dentro
-                    // do outro, e o de fora escondia o fusível do de dentro para
-                    // sempre. Tenta de novo até achar lugar só dele.
-                    P2? achado = null;
-                    for (int tentativa = 0; tentativa < 24 && achado == null; tentativa++)
-                    {
-                        var candidato = Predio.ParaMundo(Predio.PontoLivre(s, _rng));
-                        if (!TemAlgoPerto(candidato, s.Andar, Regras.EspacoEntreMoveis)) achado = candidato;
-                    }
-                    if (achado == null) continue;
+                var encostos = Predio.CelulasEncostadas(s);
+                Embaralhar(encostos);
 
-                    Recipientes.Add(new Recipiente
-                    {
-                        Pos = achado.Value,
-                        Andar = s.Andar,
-                        Tipo = (TipoRecipiente)_rng.Next(3)
-                    });
+                int postos = 0;
+                foreach (var (celula, normal) in encostos)
+                {
+                    if (postos >= Regras.RecipientesPorSala) break;
+
+                    var tipo = (TipoRecipiente)_rng.Next(3);
+                    float raio = Regras.RaioDoRecipiente(tipo);
+                    var pos = EncostarNaParede(celula, normal, raio);
+
+                    if (TemAlgoPerto(pos, s.Andar, Regras.EspacoEntreMoveis)) continue;
+                    if (Predio.EscadaEm(celula) != null) continue;
+
+                    Recipientes.Add(new Recipiente { Pos = pos, Andar = s.Andar, Tipo = tipo });
+                    postos++;
                 }
             }
 
@@ -307,15 +327,20 @@ namespace TurnoDaNoite.Core
                 if (s.Tipo == TipoSala.Portaria || s.Tipo == TipoSala.Patio) continue;
                 if (_rng.NextDouble() > Regras.FracaoDeSalasComArmario) continue;
 
-                for (int k = 0; k < Regras.ArmariosPorSala; k++)
+                var encostos = Predio.CelulasEncostadas(s);
+                Embaralhar(encostos);
+
+                int postos = 0;
+                foreach (var (celula, normal) in encostos)
                 {
-                    P2? achado = null;
-                    for (int tentativa = 0; tentativa < 24 && achado == null; tentativa++)
-                    {
-                        var candidato = Predio.ParaMundo(Predio.PontoLivre(s, _rng, 0));
-                        if (!TemAlgoPerto(candidato, s.Andar, Regras.EspacoEntreMoveis)) achado = candidato;
-                    }
-                    if (achado != null) Armarios.Add(new Armario { Pos = achado.Value, Andar = s.Andar });
+                    if (postos >= Regras.ArmariosPorSala) break;
+
+                    var pos = EncostarNaParede(celula, normal, Regras.RaioArmario);
+                    if (TemAlgoPerto(pos, s.Andar, Regras.EspacoEntreMoveis)) continue;
+                    if (Predio.EscadaEm(celula) != null) continue;
+
+                    Armarios.Add(new Armario { Pos = pos, Andar = s.Andar });
+                    postos++;
                 }
             }
 
@@ -327,6 +352,8 @@ namespace TurnoDaNoite.Core
             tomados.Add((Quadro, QuadroAndar));
             tomados.Add((Portao, 0));
             Adornos = Cenario.Montar(Predio, _rng, tomados);
+
+            MontarSolidos();
 
             var camara = Predio.Sala(TipoSala.Camara);
             Ela.Pos = Predio.ParaMundo(camara.Centro);
@@ -342,6 +369,25 @@ namespace TurnoDaNoite.Core
             Ela.Velocidade = default;
         }
 
+        /// <summary>
+        /// Junta num lugar só tudo que tem corpo. Chamado depois de distribuir:
+        /// qualquer coisa nova que ocupe chão precisa entrar aqui, e o teste
+        /// que conta os sólidos cobra isso.
+        /// </summary>
+        void MontarSolidos()
+        {
+            Solidos.Clear();
+
+            foreach (var r in Recipientes)
+                Solidos.Add(new Solido(r.Pos, r.Andar, Regras.RaioDoRecipiente(r.Tipo)));
+            foreach (var a in Armarios)
+                Solidos.Add(new Solido(a.Pos, a.Andar, Regras.RaioArmario));
+            foreach (var a in Adornos)
+                if (a.Solido) Solidos.Add(new Solido(a.Pos, a.Andar, a.Raio));
+
+            Solidos.Add(new Solido(Quadro, QuadroAndar, Regras.RaioQuadro));
+        }
+
         void Embaralhar<T>(List<T> lista)
         {
             for (int i = lista.Count - 1; i > 0; i--)
@@ -349,6 +395,29 @@ namespace TurnoDaNoite.Core
                 int j = _rng.Next(i + 1);
                 (lista[i], lista[j]) = (lista[j], lista[i]);
             }
+        }
+
+        /// <summary>
+        /// A célula onde dá para PARAR para usar uma coisa. A própria célula do
+        /// móvel está ocupada por ele, então a resposta é quase sempre uma
+        /// vizinha: exigir chegar ao centro exato do gaveteiro reprovaria toda
+        /// planta, já que ninguém consegue ficar em pé dentro de um gaveteiro.
+        /// </summary>
+        Celula VizinhoLivre(P2 alvo, int andar)
+        {
+            var c = Predio.ParaCelula(alvo, andar);
+            if (Colisao.Livre(Predio.ParaMundo(c), Regras.RaioJogador, Solidos, andar)) return c;
+
+            for (int dz = -1; dz <= 1; dz++)
+                for (int dx = -1; dx <= 1; dx++)
+                {
+                    if (dx == 0 && dz == 0) continue;
+                    var v = new Celula(c.Cx + dx, c.Cz + dz, andar);
+                    if (Predio.EhParede(v)) continue;
+                    if (P2.Distancia(Predio.ParaMundo(v), alvo) > Regras.RaioInteracao) continue;
+                    if (Colisao.Livre(Predio.ParaMundo(v), Regras.RaioJogador, Solidos, andar)) return v;
+                }
+            return c;
         }
 
         /// <summary>Lista o que ficou inalcançável. Vazia significa planta jogável.</summary>
@@ -359,17 +428,23 @@ namespace TurnoDaNoite.Core
 
             if (Predio.Escadas.Count == 0 && Predio.Andares > 1) falhas.Add("nenhuma escada");
 
+            // Alcançável A PÉ, com os móveis no lugar. A busca do Predio só
+            // conhece parede: com ela, um gaveteiro atravessado num vão de
+            // porta passava na validação e trancava a sala para sempre.
+            bool DaParaChegar(P2 alvo, int andar) => Colisao.AlcancavelAPe(
+                Predio, Solidos, Regras.RaioJogador, inicio, VizinhoLivre(alvo, andar));
+
             for (int i = 0; i < Fusiveis.Count; i++)
-                if (!Predio.Alcancavel(inicio, Predio.ParaCelula(Fusiveis[i].Pos, Fusiveis[i].Andar)))
+                if (!DaParaChegar(Fusiveis[i].Pos, Fusiveis[i].Andar))
                     falhas.Add($"fusível {i + 1}");
 
             for (int i = 0; i < Recipientes.Count; i++)
-                if (!Predio.Alcancavel(inicio, Predio.ParaCelula(Recipientes[i].Pos, Recipientes[i].Andar)))
+                if (!DaParaChegar(Recipientes[i].Pos, Recipientes[i].Andar))
                     falhas.Add($"recipiente {i + 1}");
 
             if (MapaItem == null) falhas.Add("planta do prédio sem lugar");
 
-            if (!Predio.Alcancavel(inicio, Predio.ParaCelula(Quadro, QuadroAndar))) falhas.Add("quadro");
+            if (!DaParaChegar(Quadro, QuadroAndar)) falhas.Add("quadro");
             if (!Predio.Alcancavel(inicio, Predio.ParaCelula(Ela.Pos, Ela.Andar))) falhas.Add("criatura");
             if (Ela.Andar == Jogador.Andar &&
                 P2.Distancia(Ela.Pos, Jogador.Pos) < Regras.DistanciaInicialMinima)
@@ -440,8 +515,8 @@ namespace TurnoDaNoite.Core
             {
                 Jogador.Pos += mov.Normalizado * (vel * dt);
                 Jogador.Pos = Predio.EmpurrarFora(Jogador.Pos, Regras.RaioJogador, Jogador.Andar);
-                Jogador.Pos = Cenario.Empurrar(Jogador.Pos, Regras.RaioJogador, Adornos, Jogador.Andar);
-                // a parede tem a última palavra: adorno encostado nela não pode
+                Jogador.Pos = Colisao.Empurrar(Jogador.Pos, Regras.RaioJogador, Solidos, Jogador.Andar);
+                // a parede tem a última palavra: móvel encostado nela não pode
                 // ser a coisa que te empurra para dentro do concreto
                 Jogador.Pos = Predio.EmpurrarFora(Jogador.Pos, Regras.RaioJogador, Jogador.Andar);
                 UsarEscadaSePisar();
@@ -953,6 +1028,12 @@ namespace TurnoDaNoite.Core
             }
 
             Ela.Pos += Ela.Velocidade * dt;
+            Ela.Pos = Predio.EmpurrarFora(Ela.Pos, 0.5f, Ela.Andar);
+            // Ela também esbarra nos móveis, com raio menor: atravessar um
+            // armário na frente do jogador acabaria com o susto. Raio menor
+            // porque o caminho dela ignora mobília, e ela precisa conseguir
+            // espremer em vez de ficar presa num corredor mobiliado.
+            Ela.Pos = Colisao.Empurrar(Ela.Pos, Regras.RaioCriaturaEmMoveis, Solidos, Ela.Andar);
             Ela.Pos = Predio.EmpurrarFora(Ela.Pos, 0.5f, Ela.Andar);
         }
 

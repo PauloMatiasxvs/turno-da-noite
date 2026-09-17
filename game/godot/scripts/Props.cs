@@ -86,6 +86,38 @@ namespace TurnoDaNoite.Jogo
         /// Devolve o nó visual da peça: o modelo importado, se houver, ou a
         /// primitiva equivalente. Quem chama não precisa saber qual dos dois veio.
         /// </summary>
+        /// <summary>
+        /// Cria a peça ajustando a escala pela ALTURA, e não pela caixa toda.
+        ///
+        /// É o que personagem precisa. Encaixar na caixa usa a dimensão mais
+        /// apertada das três, e um modelo de braços abertos é mais largo que
+        /// alto: a criatura de 2,35 m vinha sendo esmagada para setenta
+        /// centímetros por causa da envergadura dela. Um bicho do tamanho de
+        /// um boneco não assusta ninguém.
+        /// </summary>
+        public static Node3D CriarComAltura(Peca peca, float altura, Material fallback)
+        {
+            var recipiente = new Node3D();
+            var cena = Carregar(peca);
+
+            if (cena == null)
+            {
+                recipiente.AddChild(Primitiva(peca, new Vector3(altura * 0.4f, altura, altura * 0.3f), fallback));
+                return recipiente;
+            }
+
+            var no = cena.Instantiate<Node3D>();
+            var aabb = CalcularAabb(no);
+            if (aabb.Size.Y > 0.0001f)
+            {
+                float escala = altura / aabb.Size.Y;
+                no.Scale = new Vector3(escala, escala, escala);
+                no.Position = new Vector3(0, -aabb.Position.Y * escala, 0);
+            }
+            recipiente.AddChild(no);
+            return recipiente;
+        }
+
         public static Node3D Criar(Peca peca, Vector3 tamanho, Material fallback)
         {
             // O visual vai SEMPRE dentro de um nó pai vazio. Sem esse invólucro,
@@ -166,6 +198,7 @@ namespace TurnoDaNoite.Jogo
                 case Peca.Entulho:        return Modelos.Entulho();
                 case Peca.Mao:            return Modelos.MaoComLanterna();
                 case Peca.Planta:         return Modelos.Planta();
+                case Peca.Criatura:       return Modelos.Criatura(tamanho.Y);
             }
 
             Mesh malha = peca switch
@@ -197,7 +230,7 @@ namespace TurnoDaNoite.Jogo
             Peca.Fusivel, Peca.Bateria, Peca.Armario, Peca.QuadroEletrico,
             Peca.Portao, Peca.Caixote, Peca.Barril,
             Peca.CaixaFerramentas, Peca.Gaveteiro, Peca.Prateleira,
-            Peca.Bancada, Peca.Pilha, Peca.Entulho, Peca.Mao, Peca.Planta
+            Peca.Bancada, Peca.Pilha, Peca.Entulho, Peca.Mao, Peca.Planta, Peca.Criatura
         };
 
         /// <summary>

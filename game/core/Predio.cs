@@ -672,6 +672,40 @@ namespace TurnoDaNoite.Core
 
         public Sala Sala(TipoSala tipo) => _salas.Find(s => s.Tipo == tipo);
 
+        /// <summary>
+        /// Células de chão da sala que fazem divisa com parede, junto com a
+        /// direção que aponta para essa parede.
+        ///
+        /// É aqui que a mobília vai. Móvel no meio do cômodo é obstáculo de
+        /// labirinto e, desde que os móveis ganharam corpo, chegou a trancar
+        /// salas inteiras; encostado na parede ele é cenário e deixa o miolo
+        /// livre para andar, que é como um cômodo de verdade é arrumado.
+        ///
+        /// Pula as células com parede dos dois lados: são vãos de porta e
+        /// gargalos, e entupir um desses fecha a passagem.
+        /// </summary>
+        public List<(Celula celula, P2 normal)> CelulasEncostadas(Sala sala)
+        {
+            var achadas = new List<(Celula, P2)>();
+            int a = sala.Andar;
+
+            for (int z = sala.Z; z < sala.Z + sala.Alt; z++)
+                for (int x = sala.X; x < sala.X + sala.Larg; x++)
+                {
+                    if (EhParede(x, z, a)) continue;
+
+                    if (EhParede(x - 1, z, a) && !EhParede(x + 1, z, a))
+                        achadas.Add((new Celula(x, z, a), new P2(-1, 0)));
+                    else if (EhParede(x + 1, z, a) && !EhParede(x - 1, z, a))
+                        achadas.Add((new Celula(x, z, a), new P2(1, 0)));
+                    else if (EhParede(x, z - 1, a) && !EhParede(x, z + 1, a))
+                        achadas.Add((new Celula(x, z, a), new P2(0, -1)));
+                    else if (EhParede(x, z + 1, a) && !EhParede(x, z - 1, a))
+                        achadas.Add((new Celula(x, z, a), new P2(0, 1)));
+                }
+            return achadas;
+        }
+
         /// <summary>Uma célula livre dentro da sala, ou o centro se a sala estiver cheia.</summary>
         public Celula PontoLivre(Sala s, Random rng, int margem = 1)
         {

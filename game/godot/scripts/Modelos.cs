@@ -706,5 +706,128 @@ namespace TurnoDaNoite.Jogo
 
             return raiz;
         }
+
+        // ------------------------------------------------------------ ela
+
+        /// <summary>
+        /// A criatura. Montada em código, e não baixada, porque o único modelo
+        /// CC0 disponível era um demônio ROSA de desenho, com auréola e
+        /// forquilha: pintar de preto não resolve, porque a silhueta continua
+        /// sendo a piada. Aqui a silhueta é o produto — alta demais para ser
+        /// gente, magra demais, braços que chegam ao chão, sem rosto.
+        ///
+        /// As peças saem nomeadas porque quem desenha anima elas na mão:
+        /// CoxaE, CoxaD, BracoE, BracoD, Tronco e Cabeca.
+        /// </summary>
+        public static Node3D Criatura(float altura)
+        {
+            var raiz = new Node3D();
+
+            // proporções em fração da altura, para escalar junto
+            float h = altura;
+            var pele = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.055f, 0.050f, 0.058f),
+                Roughness = 0.97f,
+                Metallic = 0f,
+                SpecularMode = BaseMaterial3D.SpecularModeEnum.Disabled
+            };
+            var olho = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.85f, 0.80f, 0.72f),
+                EmissionEnabled = true,
+                Emission = new Color(0.9f, 0.82f, 0.70f),
+                EmissionEnergyMultiplier = 1.1f
+            };
+
+            float alturaQuadril = h * 0.46f;
+            float alturaOmbro = h * 0.82f;
+
+            // ---- pernas: dois pivôs no quadril, para a caminhada girar neles
+            foreach (int lado in new[] { -1, 1 })
+            {
+                var coxa = new Node3D
+                {
+                    Name = lado < 0 ? "CoxaE" : "CoxaD",
+                    Position = new Vector3(lado * h * 0.055f, alturaQuadril, 0)
+                };
+                coxa.AddChild(Capsula(h * 0.032f, alturaQuadril * 0.55f, pele,
+                    new Vector3(0, -alturaQuadril * 0.28f, 0)));
+                coxa.AddChild(Capsula(h * 0.026f, alturaQuadril * 0.5f, pele,
+                    new Vector3(0, -alturaQuadril * 0.74f, 0)));
+                coxa.AddChild(Caixa(new Vector3(h * 0.05f, h * 0.018f, h * 0.10f), pele,
+                    new Vector3(0, -alturaQuadril + h * 0.012f, h * 0.022f)));   // pé
+                raiz.AddChild(coxa);
+            }
+
+            // ---- tronco: estreito e curvado para a frente
+            var tronco = new Node3D { Name = "Tronco", Position = new Vector3(0, alturaQuadril, 0) };
+            tronco.RotateX(0.18f);      // corcunda
+
+            float alturaTronco = alturaOmbro - alturaQuadril;
+            tronco.AddChild(Capsula(h * 0.072f, alturaTronco * 0.62f, pele,
+                new Vector3(0, alturaTronco * 0.34f, 0)));                        // quadril e barriga
+            tronco.AddChild(Capsula(h * 0.060f, alturaTronco * 0.55f, pele,
+                new Vector3(0, alturaTronco * 0.80f, -h * 0.008f)));              // peito
+            // costelas: quatro vincos que dão fome ao bicho
+            for (int i = 0; i < 4; i++)
+                tronco.AddChild(Caixa(new Vector3(h * 0.10f, h * 0.006f, h * 0.075f), pele,
+                    new Vector3(0, alturaTronco * (0.55f + i * 0.09f), h * 0.030f)));
+
+            raiz.AddChild(tronco);
+
+            // ---- pescoço e cabeça, sem rosto, dois olhos acesos
+            var cabeca = new Node3D { Name = "Cabeca", Position = new Vector3(0, alturaOmbro, 0) };
+            cabeca.AddChild(Capsula(h * 0.022f, h * 0.075f, pele, new Vector3(0, h * 0.035f, -h * 0.01f)));
+            var cranio = Capsula(h * 0.048f, h * 0.075f, pele, new Vector3(0, h * 0.10f, -h * 0.022f));
+            cranio.RotateX(0.35f);      // cabeça baixa, olhando de baixo para cima
+            cabeca.AddChild(cranio);
+
+            foreach (int lado in new[] { -1, 1 })
+                cabeca.AddChild(Esfera(h * 0.0085f, olho,
+                    new Vector3(lado * h * 0.020f, h * 0.105f, -h * 0.055f)));
+            raiz.AddChild(cabeca);
+
+            // ---- braços: longos demais, quase encostando no chão
+            foreach (int lado in new[] { -1, 1 })
+            {
+                var braco = new Node3D
+                {
+                    Name = lado < 0 ? "BracoE" : "BracoD",
+                    Position = new Vector3(lado * h * 0.075f, alturaOmbro - h * 0.02f, 0)
+                };
+                braco.AddChild(Capsula(h * 0.026f, h * 0.20f, pele, new Vector3(0, -h * 0.10f, 0)));
+                braco.AddChild(Capsula(h * 0.021f, h * 0.22f, pele, new Vector3(0, -h * 0.31f, 0)));
+
+                // mão: uma palma e três dedos compridos
+                var mao = new Node3D { Position = new Vector3(0, -h * 0.43f, 0) };
+                mao.AddChild(Caixa(new Vector3(h * 0.035f, h * 0.045f, h * 0.018f), pele, Vector3.Zero));
+                for (int d = -1; d <= 1; d++)
+                    mao.AddChild(Capsula(h * 0.006f, h * 0.055f, pele,
+                        new Vector3(d * h * 0.013f, -h * 0.045f, 0)));
+                braco.AddChild(mao);
+
+                raiz.AddChild(braco);
+            }
+
+            return raiz;
+        }
+
+        static MeshInstance3D Capsula(float raio, float altura, Material mat, Vector3 pos)
+            => new()
+            {
+                Mesh = new CapsuleMesh { Radius = raio, Height = Mathf.Max(altura, raio * 2.05f),
+                                         RadialSegments = 10, Rings = 4 },
+                MaterialOverride = mat,
+                Position = pos
+            };
+
+        static MeshInstance3D Esfera(float raio, Material mat, Vector3 pos)
+            => new()
+            {
+                Mesh = new SphereMesh { Radius = raio, Height = raio * 2, RadialSegments = 8, Rings = 4 },
+                MaterialOverride = mat,
+                Position = pos
+            };
     }
 }

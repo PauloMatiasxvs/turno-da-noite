@@ -98,8 +98,11 @@ namespace TurnoDaNoite.Core
                     // e ainda tem de sobrar por onde passar pelo meio da célula
                     if (recuo - raio < CorredorLivre) continue;
 
-                    if (PertoDeAlgo(pos, sala.Andar, ocupado, 1.6f)) continue;
-                    if (PertoDeAdorno(pos, sala.Andar, lista, 1.1f)) continue;
+                    // folgas maiores desde que os móveis ganharam corpo: a 1,6 m
+                    // de um gaveteiro, um caixote deixava 57 cm de vão, e o
+                    // jogador tem 76 cm de largura
+                    if (PertoDeAlgo(pos, sala.Andar, ocupado, 2.3f)) continue;
+                    if (PertoDeAdorno(pos, sala.Andar, lista, 1.7f)) continue;
                     if (predio.EscadaEm(celula) != null) continue;   // o poço da escada fica livre
 
                     lista.Add(new Adorno

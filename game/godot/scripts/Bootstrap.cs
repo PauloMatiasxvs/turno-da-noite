@@ -25,7 +25,7 @@ namespace TurnoDaNoite.Jogo
         Vector2 _balancoDaMao;
         AnimationPlayer _animCriatura;
         string _clipeAtual = "";
-        /// <summary>Se o modelo do artista olha para +Z em vez de -Z, isto vira Pi.</summary>
+        /// <summary>Pi porque o modelo olha para -Z, que e a frente padrao. Modelo que olha para +Z quer 0.</summary>
         const float GiroDoModelo = Mathf.Pi;
 
         /// <summary>
@@ -95,7 +95,7 @@ namespace TurnoDaNoite.Jogo
         bool _verRecipiente;
         // modos de captura do prédio de dois andares: sala do quadro lá em cima,
         // pé da escada, e a planta aberta na tela
-        bool _verAndarDeCima, _verMapa, _verEscada;
+        bool _verAndarDeCima, _verMapa, _verEscada, _verCriatura, _verMapaDeCima;
 
         public override void _Ready()
         {
@@ -114,6 +114,8 @@ namespace TurnoDaNoite.Jogo
                 if (arg == "--vercima") _verAndarDeCima = true;
                 if (arg == "--vermapa") _verMapa = true;
                 if (arg == "--verescada") _verEscada = true;
+                if (arg == "--vercriatura") _verCriatura = true;
+                if (arg == "--vermapacima") { _verMapa = true; _verMapaDeCima = true; }
             }
 
             Opcoes.Carregar();
@@ -586,9 +588,60 @@ namespace TurnoDaNoite.Jogo
                 RaizDoAndar(_partida.MapaItem.Andar).AddChild(_mapaNo);
             }
 
-            _criatura = Props.Criar(Peca.Criatura, new Vector3(0.7f, 2.35f, 0.5f), _matCriatura);
+            // pela altura, nao pela caixa: a envergadura dela esmagava a escala
+            // e o bicho de 2,35 m aparecia com setenta centimetros
+            _criatura = Props.CriarComAltura(Peca.Criatura, Regras.AlturaDaCriatura, _matCriatura);
+            GuardarMembros();
             AddChild(_criatura);
             _animCriatura = AcharAnimador(_criatura);
+        }
+
+        Node3D _coxaE, _coxaD, _bracoE, _bracoD, _troncoDela, _cabecaDela;
+        float _passoDela;
+
+        /// <summary>
+        /// Guarda os membros para animar na mão. O modelo montado em código não
+        /// tem esqueleto nem AnimationPlayer, então a caminhada é feita aqui.
+        /// Quando um modelo com rig aparecer em assets/modelos, estes ficam
+        /// nulos e o AnimationPlayer dele assume.
+        /// </summary>
+        void GuardarMembros()
+        {
+            _coxaE = AcharPorNome(_criatura, "CoxaE");
+            _coxaD = AcharPorNome(_criatura, "CoxaD");
+            _bracoE = AcharPorNome(_criatura, "BracoE");
+            _bracoD = AcharPorNome(_criatura, "BracoD");
+            _troncoDela = AcharPorNome(_criatura, "Tronco");
+            _cabecaDela = AcharPorNome(_criatura, "Cabeca");
+        }
+
+        /// <summary>
+        /// A caminhada dela: pernas e braços em oposição, com o tronco
+        /// balançando junto. É uma senoide, mas basta — o que faz o bicho
+        /// parecer vivo é o passo bater com o quanto ele anda, e o ritmo vem
+        /// da velocidade de verdade, não de um relógio solto.
+        /// </summary>
+        void AnimarCriaturaNaMao(float dt)
+        {
+            if (_coxaE == null) return;
+
+            float vel = _partida.Ela.Velocidade.Comprimento;
+            _passoDela += dt * (0.9f + vel * 1.15f);
+
+            float balanco = Mathf.Sin(_passoDela) * Mathf.Min(0.85f, 0.14f + vel * 0.13f);
+            float contra = -balanco;
+
+            _coxaE.Rotation = new Vector3(balanco, 0, 0);
+            _coxaD.Rotation = new Vector3(contra, 0, 0);
+            // braços na contramão das pernas, e mais soltos
+            _bracoE.Rotation = new Vector3(contra * 1.25f, 0, 0.10f);
+            _bracoD.Rotation = new Vector3(balanco * 1.25f, 0, -0.10f);
+
+            if (_troncoDela != null)
+                _troncoDela.Rotation = new Vector3(0.18f + Mathf.Abs(balanco) * 0.10f,
+                                                   Mathf.Sin(_passoDela) * 0.05f, 0);
+            if (_cabecaDela != null)
+                _cabecaDela.Rotation = new Vector3(0, Mathf.Sin(_passoDela * 0.5f) * 0.12f, 0);
         }
 
         static Peca PecaDo(TipoRecipiente t) => t switch
@@ -903,7 +956,23 @@ namespace TurnoDaNoite.Jogo
                 // e gira a câmera devagar para não fotografar sempre a mesma parede
                 if (!_naAbertura)
                 {
-                    if (_verAndarDeCima)
+                    if (_verCriatura)
+                    {
+                        // Encara ela de frente numa sala, os dois parados. Sem
+                        // fixar os dois, a simulação a levava embora e a foto
+                        // saía de uma parede vazia.
+                        var sala = _partida.Predio.Salas[0];
+                        foreach (var s in _partida.Predio.Salas)
+                            if (s.Tipo == TipoSala.Comum && s.Larg * s.Alt > sala.Larg * sala.Alt) sala = s;
+
+                        var centro = _partida.Predio.ParaMundo(sala.Centro);
+                        _partida.Jogador.Andar = sala.Andar;
+                        _partida.Jogador.Pos = new P2(centro.X, centro.Z + 5.5f);
+                        _partida.Ela.Andar = sala.Andar;
+                        _partida.Ela.Pos = centro;
+                        _giro = 0; _inclinacao = -0.02f;
+                    }
+                    else if (_verAndarDeCima)
                     {
                         _partida.Jogador.Pos = new P2(_partida.Quadro.X, _partida.Quadro.Z + 4.5f);
                         _partida.Jogador.Andar = _partida.QuadroAndar;
@@ -933,7 +1002,7 @@ namespace TurnoDaNoite.Jogo
                     }
                     else { _partida.Passo(1f / 60f, new Comando()); _giro += dt * 0.35f; }
                 }
-                if (!_verRecipiente && !_verAndarDeCima && !_verEscada)
+                if (!_verRecipiente && !_verAndarDeCima && !_verEscada && !_verCriatura)
                     _inclinacao = -0.14f;   // olha um pouco para baixo: mostra chao e parede
                 _quadrosDeFoto++;
                 SincronizarCamera(dt);
@@ -966,7 +1035,7 @@ namespace TurnoDaNoite.Jogo
                     // vistas, senão a captura sai com o mapa em branco
                     _partida.Jogador.TemMapa = true;
                     _partida.RevelarTudoParaCaptura();
-                    _andarNoMapa = _partida.Jogador.Andar;
+                    _andarNoMapa = _verMapaDeCima ? 1 : _partida.Jogador.Andar;
                     _mapaAberto = true;
                     _mapa.Mostrar(_partida, _andarNoMapa);
                 }
@@ -1110,19 +1179,25 @@ namespace TurnoDaNoite.Jogo
         {
             var ela = _partida.Ela;
             _criatura.Position = new Vector3(ela.Pos.X, Predio.AlturaDoAndar(ela.Andar), ela.Pos.Z);
-            // não desenha a criatura que está no outro piso: sem isto ela
-            // aparece atravessando o chão quando passa embaixo de você
-            _criatura.Visible = ela.Andar == _partida.Jogador.Andar;
+
             var dir = ela.Direcao;
             _criatura.Rotation = new Vector3(0, Mathf.Atan2(dir.X, dir.Z) + GiroDoModelo, 0);
+
+            // As DUAS condições, numa linha só. Estavam em duas atribuições
+            // separadas e a segunda apagava a primeira: a criatura voltava a
+            // ser desenhada através da laje sempre que passasse a menos de
+            // quarenta e cinco metros, um andar abaixo de você.
+            _criatura.Visible = ela.Andar == _partida.Jogador.Andar
+                             && P2.Distancia(ela.Pos, _partida.Jogador.Pos) < 45f;
 
             // a animacao segue o estado: parada, andando ou correndo atras de voce
             float ritmo = ela.Velocidade.Comprimento;
             Animar(ela.Estado == EstadoCriatura.Caca || ritmo > 4f ? "Run"
                  : ritmo > 0.4f ? "Walk"
                  : "Idle");
-            // só existe quando está por perto: economiza e evita vê-la de longe sem querer
-            _criatura.Visible = P2.Distancia(ela.Pos, _partida.Jogador.Pos) < 45f;
+
+            // sem esqueleto importado, a caminhada é feita aqui na mão
+            AnimarCriaturaNaMao(dt);
         }
 
         void TirarFoto(string caminho)
@@ -1169,10 +1244,19 @@ namespace TurnoDaNoite.Jogo
             Checar("câmera criada", _camera != null);
             Checar("lanterna criada", _lanterna != null);
             Checar("criatura na cena", _criatura != null);
-            Checar(_animCriatura != null
-                ? "animações do modelo: " + string.Join(", ", _animCriatura.GetAnimationList())
-                : "modelo da criatura sem AnimationPlayer (ainda em primitiva?)",
-                _animCriatura != null && _animCriatura.HasAnimation("Walk") && _animCriatura.HasAnimation("Run"));
+            // A criatura anda de dois jeitos: pelo AnimationPlayer de um modelo
+            // importado, ou pelos membros que o modelo em código expõe. O que
+            // não pode é nenhum dos dois — aí ela desliza pelo chão sem mexer
+            // uma perna, que é o que ela fazia antes.
+            bool comRig = _animCriatura != null
+                          && _animCriatura.HasAnimation("Walk") && _animCriatura.HasAnimation("Run");
+            bool comMembros = _coxaE != null && _coxaD != null && _bracoE != null && _bracoD != null;
+
+            Checar(comRig ? "animação: esqueleto do modelo (" +
+                            string.Join(", ", _animCriatura.GetAnimationList()) + ")"
+                 : comMembros ? "animação: membros montados em código"
+                 : "a criatura não tem como andar: nem esqueleto, nem membros",
+                comRig || comMembros);
 
             // roda 20 s de partida sem jogador para ver a simulação andar
             var antes = _partida.Ela.Pos;
