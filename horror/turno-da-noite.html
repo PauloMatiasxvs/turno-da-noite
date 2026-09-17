@@ -987,13 +987,13 @@ function atualizarELE(dt){
         const vagar = [clamp(destino[0]+randi(-3,3),1,GW-2), clamp(destino[1]+randi(-3,3),1,GH-2)];
         if (!parede(vagar[0], vagar[1])) destino = vagar;
       }
-    } else if (ELE.semPista > 25){
+    } else if (ELE.semPista > 14){
       // faz tempo demais que ela nao tem pista: comeca a vir para o seu lado.
       // Nao e mira perfeita, e um cerco que aperta — a tensao precisa subir sozinha.
       const pj = paraCelula(jogador.p[0], jogador.p[2]);
-      const perto = [clamp(pj[0]+randi(-4,4),1,GW-2), clamp(pj[1]+randi(-4,4),1,GH-2)];
+      const perto = [clamp(pj[0]+randi(-3,3),1,GW-2), clamp(pj[1]+randi(-3,3),1,GH-2)];
       destino = parede(perto[0],perto[1]) ? pj : perto;
-      ELE.semPista = 8;
+      ELE.semPista = 4;
     } else destino = novoDestinoPatrulha();
     recalcularCaminho(destino);
   }
@@ -1268,7 +1268,7 @@ function atualizarJogador(dt){
       SOM.passo(null, jogador.correndo);
       fazerBarulho(jogador.correndo ? 24 : (jogador.agachado ? 2.5 : 8));
     }
-    jogador.bob += dt * vel * 1.5;
+    jogador.bob += dt * vel * 0.95;   // passo mais lento: a 1.5 a tela chacoalhava
   } else {
     jogador.bob = lerp(jogador.bob, Math.round(jogador.bob/Math.PI)*Math.PI, Math.min(1, dt*5));
   }
@@ -1375,24 +1375,28 @@ const CORES = {
   parede:[0.30,0.29,0.27], piso:[0.22,0.21,0.20], teto:[0.15,0.15,0.16],
   armario:[0.26,0.28,0.30], quadro:[0.34,0.30,0.22],
   fusivel:[1.0,0.72,0.20], bateria:[0.35,0.9,0.55],
-  ele:[0.055,0.05,0.06], olho:[0.9,0.12,0.12],
+  // Antes era 0.055: a criatura ficava tao escura que nem a lanterna revelava
+  // ela, e dava para passar do lado sem ver. Agora reflete luz de verdade.
+  ele:[0.20,0.19,0.21], olho:[1.0,0.10,0.10],
   portaoAberto:[0.30,0.80,0.42], portaoTrancado:[0.26,0.10,0.10]
 };
 let piscada = 0;
 
 function render(tempo){
   const asp = H > 0 ? W/H : 1;
-  const balanco = Math.sin(jogador.bob) * (jogador.correndo ? .055 : .028);
-  const lateral = Math.cos(jogador.bob*.5) * .02;
-  const tremor = jogador.medo > .55 ? (Math.random()-.5) * (jogador.medo-.55) * .05 : 0;
+  // Balanco de passo contido. Os valores antigos (.055 correndo, roll de .02)
+  // deixavam a tela tremendo a ponto de embrulhar o estomago.
+  const balanco = Math.sin(jogador.bob) * (jogador.correndo ? .020 : .012);
+  const lateral = Math.cos(jogador.bob*.5) * .008;
+  const tremor = jogador.medo > .7 ? (Math.random()-.5) * (jogador.medo-.7) * .022 : 0;
 
   const alturaOlho = jogador.escondido ? .95 : (jogador.agachado ? OLHO_AGACHADO : OLHO_EM_PE);
   const olho = [ jogador.p[0] + lateral*.3, alturaOlho + balanco + tremor, jogador.p[2] ];
   const cp = Math.cos(jogador.pitch), sp = Math.sin(jogador.pitch);
   const dir = [ -Math.sin(jogador.yaw)*cp, sp, -Math.cos(jogador.yaw)*cp ];
 
-  const proj = M4.persp((jogador.correndo ? 80 : 74) * Math.PI/180, asp, .04, 200);
-  const view = M4.mul(M4.mul(M4.rotZ(lateral*.25 + tremor*2), M4.rotX(-jogador.pitch)),
+  const proj = M4.persp((jogador.correndo ? 77 : 74) * Math.PI/180, asp, .04, 200);
+  const view = M4.mul(M4.mul(M4.rotZ(lateral*.12 + tremor), M4.rotX(-jogador.pitch)),
                M4.mul(M4.rotY(-jogador.yaw), M4.trans(-olho[0], -olho[1], -olho[2])));
 
   gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
@@ -1476,9 +1480,11 @@ function render(tempo){
     parte(.34, 1.35 - passo*.1, .05, .15, 1.15, .15, CORES.ele);
     parte(-.16, .38, passo*.2, .17, .78, .17, CORES.ele);          // pernas
     parte(.16, .38, -passo*.2, .17, .78, .17, CORES.ele);
-    const brilho = ELE.estado === "caca" ? 1 : .55;
-    parte(-.09, 2.2, .18, .055, .035, .03, CORES.olho, brilho);
-    parte(.09, 2.2, .18, .055, .035, .03, CORES.olho, brilho);
+    // olhos maiores e sempre acesos: sao a unica coisa que te avisa no escuro
+    const brilho = 1;
+    const olho = ELE.estado === "caca" ? .085 : .07;
+    parte(-.10, 2.2, .17, olho, .055, .04, CORES.olho, brilho);
+    parte(.10, 2.2, .17, olho, .055, .04, CORES.olho, brilho);
   }
 
   /* ---- pós-processamento ---- */
@@ -1643,7 +1649,7 @@ if (location.search.indexOf("selftest") >= 0){
   jogador.agachado = false;
   jogador.vivo = true;
   let pego = false, segundos = 0, menorDist = 999, vezesCaca = 0, estadoAnterior = "";
-  for (let i = 0; i < 60*180; i++){
+  for (let i = 0; i < 60*240; i++){
     atualizarELE(1/60);
     segundos = i/60;
     menorDist = Math.min(menorDist, len2(ELE.p[0]-jogador.p[0], ELE.p[2]-jogador.p[2]));
@@ -1653,6 +1659,7 @@ if (location.search.indexOf("selftest") >= 0){
   }
   notas.push("      diagnostico: chegou a " + menorDist.toFixed(1) + " m, cacou " + vezesCaca + "x");
   nota("caça e alcança o jogador parado em " + segundos.toFixed(0) + " s", pego);
+  notas.push("      (a planta e sorteada: o tempo varia entre partidas)");
 
   // 3) o armário salva: mesmo com ela caçando, prender o ar segura
   jogador.vivo = true;
