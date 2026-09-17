@@ -606,7 +606,10 @@ namespace TurnoDaNoite.Core
             Jogador.Medo += (alvo - Jogador.Medo) * Math.Min(1f, dt * 1.6f);
 
             _tempoBatida -= dt;
-            if (_tempoBatida <= 0 && (Jogador.Medo > 0.2f || Jogador.Folego < 0.4f))
+            // Limiares mais altos que os originais (0,2 e 0,4): antes o coração
+            // batia quase o tempo todo e virava um estalo contínuo no ouvido em
+            // vez de aviso de perigo. Agora só bate quando ela está perto mesmo.
+            if (_tempoBatida <= 0 && (Jogador.Medo > 0.45f || Jogador.Folego < 0.25f))
             {
                 _tempoBatida = Math.Max(0.32f, 0.95f - Jogador.Medo * 0.55f - (1 - Jogador.Folego) * 0.2f);
                 Eventos.Add(Evento.Batida);

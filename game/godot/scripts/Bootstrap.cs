@@ -33,6 +33,7 @@ namespace TurnoDaNoite.Jogo
         float _giro, _inclinacao;
         bool _mouseCapturado;
         bool _pausado;
+        bool _naAbertura;
         bool _interagirPedido, _lanternaPedida;
         float _balanco;
 
@@ -82,7 +83,12 @@ namespace TurnoDaNoite.Jogo
             _hud = new Hud();
             AddChild(_hud);
 
-            CapturarMouse(!_autoTeste);
+            // Abre explicando o objetivo. Sem isto a pessoa cai no escuro sem
+            // saber o que fazer, que foi exatamente o que aconteceu.
+            _naAbertura = !_autoTeste && !_tirarFoto;
+            if (_naAbertura) _hud.MostrarAbertura();
+
+            CapturarMouse(!_autoTeste && !_naAbertura);
         }
 
         // ------------------------------------------------------------- cenário
@@ -372,7 +378,7 @@ namespace TurnoDaNoite.Jogo
             {
                 switch (k.Keycode)
                 {
-                    case Key.Escape: AlternarPausa(); break;
+                    case Key.Escape: if (_naAbertura) { _naAbertura = false; CapturarMouse(true); } else AlternarPausa(); break;
                     // sair de verdade. Sem isto só restava Alt+F4, e ninguém
                     // deveria precisar descobrir isso sozinho.
                     case Key.Q: if (_pausado) GetTree().Quit(); break;
@@ -385,7 +391,54 @@ namespace TurnoDaNoite.Jogo
                 return;
             }
 
-            if (e is InputEventMouseButton mb && mb.Pressed && _pausado) AlternarPausa();
+            if (e is InputEventMouseButton mb && mb.Pressed)
+            {
+                if (_naAbertura) { _naAbertura = false; CapturarMouse(true); }
+                else if (_pausado) AlternarPausa();
+            }
+        }
+
+        /// <summary>
+        /// Bússola sob demanda (TAB). Não fica ligada porque saber sempre onde
+        /// ir mata a tensão — mas ficar perdido no escuro sem nenhuma saída é
+        /// pior. Segurar a tecla é o meio-termo.
+        /// </summary>
+        string TextoDaBussola()
+        {
+            if (!Input.IsKeyPressed(Key.Tab)) return null;
+
+            P2 alvo;
+            string oQue;
+            if (_partida.PortaoAberto) { alvo = _partida.Portao; oQue = "portão"; }
+            else if (_partida.Jogador.FusiveisNaMao > 0) { alvo = _partida.Quadro; oQue = "quadro elétrico"; }
+            else
+            {
+                // fusível mais próximo que ainda está no chão
+                alvo = _partida.Quadro;
+                oQue = "quadro elétrico";
+                float melhor = float.MaxValue;
+                foreach (var f in _partida.Fusiveis)
+                {
+                    if (f.Recolhido) continue;
+                    float d = P2.Distancia(f.Pos, _partida.Jogador.Pos);
+                    if (d < melhor) { melhor = d; alvo = f.Pos; oQue = "fusível mais próximo"; }
+                }
+            }
+
+            var para = alvo - _partida.Jogador.Pos;
+            float dist = para.Comprimento;
+
+            // ângulo entre para onde você olha e onde está o alvo
+            var frente = Direcao.Frente(_giro);
+            var direita = Direcao.Direita(_giro);
+            float aFrente = P2.Escalar(para.Normalizado, frente);
+            float aoLado = P2.Escalar(para.Normalizado, direita);
+
+            string seta = aFrente > 0.7f ? "em frente"
+                        : aFrente < -0.7f ? "atrás de você"
+                        : aoLado > 0 ? "à sua direita" : "à sua esquerda";
+
+            return $"{oQue}: {seta}, {dist:0} m";
         }
 
         void AlternarPausa()
@@ -463,7 +516,7 @@ namespace TurnoDaNoite.Jogo
                 return;
             }
 
-            if (_partida.Fase == Fase.Jogando && !_pausado)
+            if (_partida.Fase == Fase.Jogando && !_pausado && !_naAbertura)
             {
                 _partida.Passo(dt, LerComando());
                 foreach (var ev in _partida.Eventos) Som.Tocar(this, ev, _partida);
@@ -472,7 +525,8 @@ namespace TurnoDaNoite.Jogo
             SincronizarCamera(dt);
             SincronizarItens(dt);
             SincronizarCriatura(dt);
-            _hud.Atualizar(_partida, _pausado);
+            if (_naAbertura) return;
+            _hud.Atualizar(_partida, _pausado, TextoDaBussola());
         }
 
         void SincronizarCamera(float dt)

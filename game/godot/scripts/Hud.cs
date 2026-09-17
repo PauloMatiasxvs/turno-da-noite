@@ -9,7 +9,7 @@ namespace TurnoDaNoite.Jogo
     /// </summary>
     public partial class Hud : CanvasLayer
     {
-        Label _objetivo, _dica, _fusiveis, _centro, _sensibilidade;
+        Label _objetivo, _dica, _fusiveis, _centro, _sensibilidade, _bussola;
         ColorRect _bateriaFundo, _bateriaBarra, _folegoFundo, _folegoBarra, _escuro;
 
         static readonly Color Osso = new(0.79f, 0.77f, 0.72f);
@@ -35,6 +35,7 @@ namespace TurnoDaNoite.Jogo
             _objetivo.AnchorRight = 1;
             _objetivo.Position = new Vector2(0, 70);
             _objetivo.HorizontalAlignment = HorizontalAlignment.Center;
+            _objetivo.Size = new Vector2(900, 46);
 
             _dica = Texto(14, Osso);
             _dica.AnchorRight = 1; _dica.AnchorTop = 1; _dica.AnchorBottom = 1;
@@ -47,6 +48,11 @@ namespace TurnoDaNoite.Jogo
             _fusiveis.Position = new Vector2(-190, -70);
             _fusiveis.HorizontalAlignment = HorizontalAlignment.Right;
             _fusiveis.Size = new Vector2(150, 40);
+
+            _bussola = Texto(15, Ambar);
+            _bussola.AnchorRight = 1;
+            _bussola.Position = new Vector2(0, 130);
+            _bussola.HorizontalAlignment = HorizontalAlignment.Center;
 
             _sensibilidade = Texto(12, Ambar);
             _sensibilidade.AnchorRight = 1;
@@ -87,7 +93,26 @@ namespace TurnoDaNoite.Jogo
             return (fundo, barra);
         }
 
-        public void Atualizar(Partida p, bool pausado = false)
+        /// <summary>
+        /// Tela de abertura. O jogo largava a pessoa no escuro sem dizer o que
+        /// fazer — a primeira reação de quem jogou foi "como que ganha?".
+        /// </summary>
+        public void MostrarAbertura()
+        {
+            _centro.Text =
+                "TURNO DA NOITE\n\n" +
+                "Você é o vigia. A energia caiu às 2h14.\n" +
+                "Ache CINCO FUSÍVEIS espalhados pelo prédio,\n" +
+                "leve ao QUADRO ELÉTRICO e volte ao PORTÃO.\n\n" +
+                "Você não tem arma. Tem algo aqui embaixo.\n\n" +
+                "W A S D andar   ·   Mouse olhar   ·   F lanterna\n" +
+                "E pegar e usar   ·   Shift correr   ·   Ctrl agachar\n" +
+                "TAB mostra para onde ir   ·   ESC pausa\n\n" +
+                "clique para começar";
+            _centro.AddThemeColorOverride("font_color", Osso);
+        }
+
+        public void Atualizar(Partida p, bool pausado = false, string bussola = null)
         {
             if (pausado)
             {
@@ -109,11 +134,22 @@ namespace TurnoDaNoite.Jogo
             _folegoBarra.Size = new Vector2(150 * Mathf.Clamp(j.Folego, 0, 1), 4);
             _fusiveis.Text = $"{j.FusiveisNaMao} / {Regras.FusiveisNecessarios}";
 
-            _objetivo.Text = p.PortaoAberto
-                ? "VOLTE À PORTARIA"
-                : j.FusiveisInstalados > 0
-                    ? $"FALTAM {Regras.FusiveisNecessarios - j.FusiveisInstalados} FUSÍVEIS"
-                    : "ACHE CINCO FUSÍVEIS";
+            // Objetivo explícito, e em duas linhas: o que fazer agora e onde você está.
+            // "ACHE CINCO FUSÍVEIS" sozinho não diz o que fazer depois de achá-los.
+            string tarefa;
+            if (p.PortaoAberto)
+                tarefa = "ENERGIA RESTABELECIDA — VOLTE AO PORTÃO, NA PORTARIA";
+            else if (j.FusiveisNaMao > 0)
+                tarefa = $"LEVE OS {j.FusiveisNaMao} FUSÍVEIS AO QUADRO ELÉTRICO";
+            else if (j.FusiveisInstalados > 0)
+                tarefa = $"FALTAM {Regras.FusiveisNecessarios - j.FusiveisInstalados} FUSÍVEIS — PROCURE NAS SALAS";
+            else
+                tarefa = "ACHE CINCO FUSÍVEIS PELO PRÉDIO";
+
+            var sala = p.Predio.SalaEm(j.Pos);
+            _objetivo.Text = tarefa + (sala != null ? $"\nvocê está: {sala.Nome}" : "\nvocê está: corredor");
+
+            _bussola.Text = bussola ?? "";
 
             // aviso de sensibilidade aparece só quando você acabou de mexer
             if (Opcoes.Porcentagem != _sensAnterior)

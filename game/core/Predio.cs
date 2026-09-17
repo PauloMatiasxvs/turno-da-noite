@@ -276,6 +276,14 @@ namespace TurnoDaNoite.Core
             return blocos;
         }
 
+        /// <summary>Em que cômodo está este ponto, ou null se for corredor. Serve para o jogador se situar.</summary>
+        public Sala SalaEm(P2 ponto)
+        {
+            var c = ParaCelula(ponto);
+            foreach (var s in _salas) if (s.Contem(c)) return s;
+            return null;
+        }
+
         /// <summary>Uma célula livre dentro da sala, ou o centro se a sala estiver cheia.</summary>
         public Celula PontoLivre(Sala s, Random rng, int margem = 1)
         {

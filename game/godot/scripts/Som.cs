@@ -71,9 +71,11 @@ namespace TurnoDaNoite.Jogo
             {
                 Evento.Passo          => Onda(0.10f, 240, 90, 0.22f, 0.75f),
                 Evento.PassoDela      => Onda(0.22f, 150, 55, 0.55f, 0.65f),
-                Evento.Respiracao     => Onda(0.42f, 620, 240, 0.16f, 0.85f),
+                Evento.Respiracao     => Onda(0.42f, 520, 220, 0.11f, 0.8f),
                 Evento.Ofegante       => Onda(0.55f, 700, 200, 0.30f, 0.9f),
-                Evento.Batida         => Onda(0.18f, 56, 30, 0.35f, 0f),
+                // batida antes era 56->30 Hz: grave demais, o alto-falante chacoalhava
+                // em vez de bater. Mais agudo e mais baixo soa como coracao mesmo.
+                Evento.Batida         => Onda(0.26f, 95, 48, 0.16f, 0f),
                 Evento.PegouFusivel   => Onda(0.14f, 880, 1400, 0.30f, 0f),
                 Evento.PegouBateria   => Onda(0.10f, 520, 780, 0.22f, 0.1f),
                 Evento.InstalouFusivel=> Onda(0.28f, 160, 60, 0.45f, 0.5f),
@@ -106,7 +108,13 @@ namespace TurnoDaNoite.Jogo
             var rng = new RandomNumberGenerator();
             rng.Randomize();
 
+            // Ataque de 8 ms. Sem ele a onda comeca em amplitude cheia e o alto-falante
+            // estala a cada som — com a batida do coracao tocando a cada meio segundo,
+            // isso vira um estalo continuo no ouvido.
+            int amostrasDeAtaque = Mathf.Max(1, (int)(Taxa * 0.008f));
+
             float fase = 0;
+            float chiadoAnterior = 0;
             for (int i = 0; i < n; i++)
             {
                 float t = i / (float)n;
@@ -114,8 +122,14 @@ namespace TurnoDaNoite.Jogo
                 fase += freq / Taxa * Mathf.Tau;
 
                 float tom = Mathf.Sin(fase);
-                float chiado = rng.Randf() * 2f - 1f;
-                float envelope = Mathf.Pow(1f - t, 2.0f);
+                // ruido branco puro tem energia demais no agudo e chia. Media com a
+                // amostra anterior derruba o topo e soa como ar, nao como estatica.
+                float bruto = rng.Randf() * 2f - 1f;
+                float chiado = (bruto + chiadoAnterior) * 0.5f;
+                chiadoAnterior = bruto;
+
+                float ataque = Mathf.Min(1f, i / (float)amostrasDeAtaque);
+                float envelope = Mathf.Pow(1f - t, 2.0f) * ataque;
                 float amostra = Mathf.Lerp(tom, chiado, ruido) * envelope * volume;
 
                 short s = (short)(Mathf.Clamp(amostra, -1f, 1f) * short.MaxValue);
