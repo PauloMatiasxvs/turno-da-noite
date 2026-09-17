@@ -48,6 +48,7 @@ game/godot/obj/
 
 # capturas de tela do modo --screenshot
 game/godot/captura_*.png
+game/godot/captura_*.png.import
 
 # executavel exportado (184 MB): nao vai para o git
 dist-jogo/
