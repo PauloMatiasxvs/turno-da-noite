@@ -22,6 +22,7 @@ namespace TurnoDaNoite.Core
     public sealed class Adorno
     {
         public P2 Pos;
+        public int Andar;
         public float Giro;
         public TipoAdorno Tipo;
 
@@ -65,7 +66,7 @@ namespace TurnoDaNoite.Core
         /// vira cenário. <paramref name="ocupado"/> são os pontos que já têm algo
         /// (recipiente, armário, quadro) e onde nada mais pode nascer.
         /// </summary>
-        public static List<Adorno> Montar(Predio predio, Random rng, IReadOnlyList<P2> ocupado)
+        public static List<Adorno> Montar(Predio predio, Random rng, IReadOnlyList<(P2 pos, int andar)> ocupado)
         {
             var lista = new List<Adorno>();
 
@@ -77,10 +78,15 @@ namespace TurnoDaNoite.Core
                 Embaralhar(bordas, rng);
 
                 int quantos = Math.Max(3, bordas.Count / 3);
+                int postosNaSala = 0;
+
                 foreach (var (celula, normal) in bordas)
                 {
-                    if (lista.Count >= 400) break;
-                    if (quantos-- <= 0) break;
+                    if (lista.Count >= 600) break;
+                    // Cômodo pequeno tem poucas bordas boas, e a cota acabava
+                    // antes de entrar qualquer coisa: sala vazia de novo. Enquanto
+                    // não houver nada aqui dentro, insiste além da cota.
+                    if (quantos-- <= 0 && postosNaSala >= 2) break;
 
                     var (tipo, raio) = DeParede[rng.Next(DeParede.Length)];
 
@@ -92,22 +98,26 @@ namespace TurnoDaNoite.Core
                     // e ainda tem de sobrar por onde passar pelo meio da célula
                     if (recuo - raio < CorredorLivre) continue;
 
-                    if (PertoDeAlgo(pos, ocupado, 1.6f)) continue;
-                    if (PertoDeAdorno(pos, lista, 1.1f)) continue;
+                    if (PertoDeAlgo(pos, sala.Andar, ocupado, 1.6f)) continue;
+                    if (PertoDeAdorno(pos, sala.Andar, lista, 1.1f)) continue;
+                    if (predio.EscadaEm(celula) != null) continue;   // o poço da escada fica livre
 
                     lista.Add(new Adorno
                     {
                         Pos = pos,
+                        Andar = sala.Andar,
                         Giro = MathF.Atan2(normal.X, normal.Z) + (float)(rng.NextDouble() - 0.5) * 0.5f,
                         Tipo = tipo,
                         Raio = raio
                     });
+                    postosNaSala++;
                 }
 
                 // um cano atravessando o teto da sala, no eixo mais comprido
                 lista.Add(new Adorno
                 {
                     Pos = predio.ParaMundo(sala.Centro),
+                    Andar = sala.Andar,
                     Giro = sala.Larg >= sala.Alt ? 0f : MathF.PI / 2f,
                     Tipo = TipoAdorno.CanoTeto,
                     Raio = 0f
@@ -125,36 +135,37 @@ namespace TurnoDaNoite.Core
         static List<(Celula celula, P2 normal)> CelulasDeBorda(Predio predio, Sala sala)
         {
             var achadas = new List<(Celula, P2)>();
+            int a = sala.Andar;
             for (int z = sala.Z; z < sala.Z + sala.Alt; z++)
                 for (int x = sala.X; x < sala.X + sala.Larg; x++)
                 {
-                    if (predio.EhParede(x, z)) continue;
+                    if (predio.EhParede(x, z, a)) continue;
 
                     // porta é um vão na parede: encostar móvel ao lado dela
                     // acaba estreitando a passagem, então pulo as diagonais
-                    if (predio.EhParede(x - 1, z) && !predio.EhParede(x + 1, z))
-                        achadas.Add((new Celula(x, z), new P2(-1, 0)));
-                    else if (predio.EhParede(x + 1, z) && !predio.EhParede(x - 1, z))
-                        achadas.Add((new Celula(x, z), new P2(1, 0)));
-                    else if (predio.EhParede(x, z - 1) && !predio.EhParede(x, z + 1))
-                        achadas.Add((new Celula(x, z), new P2(0, -1)));
-                    else if (predio.EhParede(x, z + 1) && !predio.EhParede(x, z - 1))
-                        achadas.Add((new Celula(x, z), new P2(0, 1)));
+                    if (predio.EhParede(x - 1, z, a) && !predio.EhParede(x + 1, z, a))
+                        achadas.Add((new Celula(x, z, a), new P2(-1, 0)));
+                    else if (predio.EhParede(x + 1, z, a) && !predio.EhParede(x - 1, z, a))
+                        achadas.Add((new Celula(x, z, a), new P2(1, 0)));
+                    else if (predio.EhParede(x, z - 1, a) && !predio.EhParede(x, z + 1, a))
+                        achadas.Add((new Celula(x, z, a), new P2(0, -1)));
+                    else if (predio.EhParede(x, z + 1, a) && !predio.EhParede(x, z - 1, a))
+                        achadas.Add((new Celula(x, z, a), new P2(0, 1)));
                 }
             return achadas;
         }
 
-        static bool PertoDeAlgo(P2 p, IReadOnlyList<P2> pontos, float limite)
+        static bool PertoDeAlgo(P2 p, int andar, IReadOnlyList<(P2 pos, int andar)> pontos, float limite)
         {
             for (int i = 0; i < pontos.Count; i++)
-                if (P2.Distancia(p, pontos[i]) < limite) return true;
+                if (pontos[i].andar == andar && P2.Distancia(p, pontos[i].pos) < limite) return true;
             return false;
         }
 
-        static bool PertoDeAdorno(P2 p, List<Adorno> lista, float limite)
+        static bool PertoDeAdorno(P2 p, int andar, List<Adorno> lista, float limite)
         {
             for (int i = 0; i < lista.Count; i++)
-                if (P2.Distancia(p, lista[i].Pos) < limite) return true;
+                if (lista[i].Andar == andar && P2.Distancia(p, lista[i].Pos) < limite) return true;
             return false;
         }
 
@@ -172,12 +183,12 @@ namespace TurnoDaNoite.Core
         /// das paredes porque adorno é círculo e parede é caixa — juntar os dois
         /// numa função só só esconderia qual deles prendeu você no canto.
         /// </summary>
-        public static P2 Empurrar(P2 p, float raio, List<Adorno> adornos)
+        public static P2 Empurrar(P2 p, float raio, List<Adorno> adornos, int andar = 0)
         {
             for (int i = 0; i < adornos.Count; i++)
             {
                 var a = adornos[i];
-                if (!a.Solido) continue;
+                if (!a.Solido || a.Andar != andar) continue;
 
                 float soma = raio + a.Raio;
                 float dx = p.X - a.Pos.X, dz = p.Z - a.Pos.Z;

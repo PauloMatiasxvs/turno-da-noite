@@ -598,5 +598,113 @@ namespace TurnoDaNoite.Jogo
 
             return raiz;
         }
+
+        // ------------------------------------------------------------ escada
+
+        /// <summary>
+        /// Lance de escada de um andar: degraus, dois montantes e corrimão.
+        ///
+        /// O jogador não sobe degrau por degrau — trocar de andar é pisar no
+        /// poço — mas a escada precisa ESTAR lá, e inteira. Um buraco no chão
+        /// sem escada nenhuma lê como bug, não como passagem.
+        /// </summary>
+        public static Node3D Escada(float altura, float largura)
+        {
+            var raiz = new Node3D();
+            var aco = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.22f, 0.23f, 0.24f), Metallic = 0.65f, Roughness = 0.5f
+            };
+            var piso = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.30f, 0.30f, 0.31f), Metallic = 0.5f, Roughness = 0.62f
+            };
+
+            int degraus = Mathf.Max(6, (int)(altura / 0.19f));
+            float passoY = altura / degraus;
+            float profundidade = largura * 0.92f;
+            float passoZ = profundidade / degraus;
+            float larguraDoLance = largura * 0.62f;
+
+            for (int i = 0; i < degraus; i++)
+            {
+                float y = passoY * (i + 0.5f);
+                float z = -profundidade / 2 + passoZ * (i + 0.5f);
+
+                raiz.AddChild(Caixa(new Vector3(larguraDoLance, 0.045f, passoZ * 0.95f), piso,
+                    new Vector3(0, y, z)));                                    // piso do degrau
+                raiz.AddChild(Caixa(new Vector3(larguraDoLance, passoY * 0.8f, 0.03f), aco,
+                    new Vector3(0, y - passoY * 0.4f, z - passoZ * 0.45f)));   // espelho
+            }
+
+            // montantes laterais, inclinados junto com o lance
+            float inclinacao = Mathf.Atan2(altura, profundidade);
+            float comprimento = Mathf.Sqrt(altura * altura + profundidade * profundidade);
+            foreach (float sx in new[] { -1f, 1f })
+            {
+                var viga = Caixa(new Vector3(0.05f, 0.22f, comprimento), aco,
+                    new Vector3(sx * larguraDoLance / 2, altura / 2 - 0.12f, 0));
+                viga.RotateX(-inclinacao);
+                raiz.AddChild(viga);
+
+                var corrimao = Cilindro(0.028f, comprimento, aco,
+                    new Vector3(sx * larguraDoLance / 2, altura / 2 + 0.85f, 0), 8);
+                corrimao.RotateX(Mathf.Pi / 2 - inclinacao);
+                raiz.AddChild(corrimao);
+
+                // três balaústres por lado, para o corrimão não flutuar
+                for (int i = 0; i < 3; i++)
+                {
+                    float t = (i + 0.5f) / 3f;
+                    raiz.AddChild(Cilindro(0.016f, 0.9f, aco, new Vector3(
+                        sx * larguraDoLance / 2,
+                        altura * t + 0.4f,
+                        -profundidade / 2 + profundidade * t), 6));
+                }
+            }
+
+            // patamar em cima, onde você desemboca
+            raiz.AddChild(Caixa(new Vector3(largura * 0.8f, 0.06f, largura * 0.35f), piso,
+                new Vector3(0, altura - 0.03f, profundidade / 2 + largura * 0.16f)));
+
+            return raiz;
+        }
+
+        /// <summary>
+        /// A planta do prédio: uma folha dobrada, amarelada, com traços de
+        /// tinta. É o item mais importante do jogo depois dos fusíveis, então
+        /// não pode ser um retângulo branco no chão.
+        /// </summary>
+        public static Node3D Planta()
+        {
+            var raiz = new Node3D();
+            var papel = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.86f, 0.81f, 0.64f),
+                Roughness = 0.95f,
+                EmissionEnabled = true,
+                Emission = new Color(0.86f, 0.78f, 0.55f),
+                EmissionEnergyMultiplier = 0.55f
+            };
+            var tinta = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.16f, 0.22f, 0.35f), Roughness = 0.9f
+            };
+
+            raiz.AddChild(Caixa(new Vector3(0.30f, 0.006f, 0.22f), papel, new Vector3(0, 0.05f, 0)));
+
+            // a metade dobrada, levantada num ângulo
+            var dobra = Caixa(new Vector3(0.30f, 0.005f, 0.20f), papel, new Vector3(0, 0.02f, -0.02f));
+            dobra.RotateX(-0.55f);
+            dobra.Position = new Vector3(0, 0.10f, -0.08f);
+            raiz.AddChild(dobra);
+
+            // riscos de planta baixa: dois traços cruzados, o bastante para ler
+            raiz.AddChild(Caixa(new Vector3(0.20f, 0.002f, 0.012f), tinta, new Vector3(0, 0.054f, 0.04f)));
+            raiz.AddChild(Caixa(new Vector3(0.012f, 0.002f, 0.14f), tinta, new Vector3(-0.06f, 0.054f, 0)));
+            raiz.AddChild(Caixa(new Vector3(0.012f, 0.002f, 0.09f), tinta, new Vector3(0.07f, 0.054f, -0.02f)));
+
+            return raiz;
+        }
     }
 }

@@ -23,15 +23,21 @@ namespace TurnoDaNoite.Tests
         {
             var p = Nova(semente);
             // só os sólidos: cano de teto passa por cima de tudo, e é para passar
+            // so vale comparar no MESMO andar: um caixote em cima e um gaveteiro
+            // embaixo tem quase a mesma coordenada no plano e nao se tocam
             foreach (var a in p.Adornos.Where(x => x.Solido))
             {
                 foreach (var r in p.Recipientes)
-                    Assert.True(P2.Distancia(a.Pos, r.Pos) > 1.0f,
-                        $"{a.Tipo} em cima de um {r.Nome}");
+                    if (r.Andar == a.Andar)
+                        Assert.True(P2.Distancia(a.Pos, r.Pos) > 1.0f,
+                            $"{a.Tipo} em cima de um {r.Nome}");
                 foreach (var m in p.Armarios)
-                    Assert.True(P2.Distancia(a.Pos, m.Pos) > 1.0f, $"{a.Tipo} em cima de um armário");
-                Assert.True(P2.Distancia(a.Pos, p.Quadro) > 1.0f, "adorno em cima do quadro");
-                Assert.True(P2.Distancia(a.Pos, p.Portao) > 1.0f, "adorno na porta");
+                    if (m.Andar == a.Andar)
+                        Assert.True(P2.Distancia(a.Pos, m.Pos) > 1.0f, $"{a.Tipo} em cima de um armário");
+                if (a.Andar == p.QuadroAndar)
+                    Assert.True(P2.Distancia(a.Pos, p.Quadro) > 1.0f, "adorno em cima do quadro");
+                if (a.Andar == 0)
+                    Assert.True(P2.Distancia(a.Pos, p.Portao) > 1.0f, "adorno na porta");
             }
         }
 
@@ -44,8 +50,8 @@ namespace TurnoDaNoite.Tests
         {
             var p = Nova(semente);
             foreach (var a in p.Adornos)
-                Assert.False(p.Predio.EhParede(p.Predio.ParaCelula(a.Pos)),
-                    $"{a.Tipo} dentro da parede em {a.Pos}");
+                Assert.False(p.Predio.EhParede(p.Predio.ParaCelula(a.Pos, a.Andar)),
+                    $"{a.Tipo} dentro da parede em {a.Pos} andar {a.Andar}");
         }
 
         [Fact]
@@ -53,7 +59,7 @@ namespace TurnoDaNoite.Tests
         {
             var p = Nova(4242);
             foreach (var a in p.Adornos)
-                Assert.NotEqual(TipoSala.Patio, p.Predio.SalaEm(a.Pos)?.Tipo);
+                Assert.NotEqual(TipoSala.Patio, p.Predio.SalaEm(a.Pos, a.Andar)?.Tipo);
         }
 
         [Fact]
@@ -62,7 +68,7 @@ namespace TurnoDaNoite.Tests
             var p = Nova(4242);
             foreach (var a in p.Adornos.Where(x => x.Solido))
             {
-                var centro = p.Predio.ParaMundo(p.Predio.ParaCelula(a.Pos));
+                var centro = p.Predio.ParaMundo(p.Predio.ParaCelula(a.Pos, a.Andar));
                 float folga = P2.Distancia(a.Pos, centro) - a.Raio;
                 Assert.True(folga >= Cenario.CorredorLivre - 0.001f,
                     $"{a.Tipo} deixa só {folga:0.00} m de folga no meio da célula");
@@ -77,7 +83,7 @@ namespace TurnoDaNoite.Tests
             var a = p.Adornos.First(x => x.Solido);
 
             var dentro = new P2(a.Pos.X + a.Raio * 0.2f, a.Pos.Z);
-            var fora = Cenario.Empurrar(dentro, Regras.RaioJogador, p.Adornos);
+            var fora = Cenario.Empurrar(dentro, Regras.RaioJogador, p.Adornos, a.Andar);
             Assert.True(P2.Distancia(fora, a.Pos) >= a.Raio + Regras.RaioJogador - 0.001f,
                 "entrou dentro do móvel e continuou lá");
         }
@@ -92,8 +98,7 @@ namespace TurnoDaNoite.Tests
             {
                 Assert.False(a.Solido);
                 var antes = a.Pos;
-                Assert.Equal(antes, Cenario.Empurrar(antes, Regras.RaioJogador,
-                    teto.ToList()));
+                Assert.Equal(antes, Cenario.Empurrar(antes, Regras.RaioJogador, teto.ToList(), a.Andar));
             }
         }
 
@@ -104,7 +109,7 @@ namespace TurnoDaNoite.Tests
             foreach (var sala in p.Predio.Salas)
             {
                 if (sala.Tipo == TipoSala.Patio) continue;
-                int quantos = p.Adornos.Count(a => sala.Contem(p.Predio.ParaCelula(a.Pos)));
+                int quantos = p.Adornos.Count(a => sala.Contem(p.Predio.ParaCelula(a.Pos, a.Andar)));
                 Assert.True(quantos >= 2, $"{sala.Nome} ficou vazia ({quantos} peças)");
             }
         }
@@ -116,21 +121,29 @@ namespace TurnoDaNoite.Tests
         [InlineData(99999)]
         public void DaParaAndarDaEntradaAteOQuadroComOCenarioNoLugar(int semente)
         {
-            // não basta o BFS achar caminho: ele ignora os móveis. Aqui o boneco
-            // anda de verdade, esbarrando em tudo, e tem de chegar.
+            // Não basta o BFS achar caminho: ele ignora os móveis. Aqui o boneco
+            // anda de verdade, esbarrando em tudo, e tem de chegar — subindo a
+            // escada no meio, porque o quadro fica no andar de cima.
             var p = Nova(semente);
             var destino = p.Quadro;
+            int andarDestino = p.QuadroAndar;
 
-            for (int i = 0; i < 60 * 180 && P2.Distancia(p.Jogador.Pos, destino) > 2f; i++)
+            bool Chegou() => p.Jogador.Andar == andarDestino &&
+                             P2.Distancia(p.Jogador.Pos, destino) <= 2.2f;
+
+            for (int i = 0; i < 60 * 400 && !Chegou(); i++)
             {
-                var caminho = p.Predio.Caminho(p.Predio.ParaCelula(p.Jogador.Pos),
-                                               p.Predio.ParaCelula(destino));
+                var caminho = p.Predio.Caminho(p.Predio.ParaCelula(p.Jogador.Pos, p.Jogador.Andar),
+                                               p.Predio.ParaCelula(destino, andarDestino));
                 Assert.NotNull(caminho);
 
                 var proximo = caminho.Count > 1
                     ? p.Predio.ParaMundo(caminho[1])
                     : destino;
                 var d = (proximo - p.Jogador.Pos).Normalizado;
+                // já em cima do próximo nó (é uma escada): empurra numa direção
+                // qualquer, senão o comando fica nulo e o passo não acontece
+                if (d.Comprimento < 0.01f) d = new P2(1, 0);
 
                 // converte a direção do mundo para o comando local do jogador
                 p.Jogador.Giro = MathF.Atan2(-d.X, -d.Z);
@@ -139,8 +152,9 @@ namespace TurnoDaNoite.Tests
                 if (p.Fase != Fase.Jogando) break;   // ela pegou: outro teste cuida disso
             }
 
-            Assert.True(P2.Distancia(p.Jogador.Pos, destino) <= 2f || p.Fase != Fase.Jogando,
-                $"empacou a {P2.Distancia(p.Jogador.Pos, destino):0.0} m do quadro");
+            Assert.True(Chegou() || p.Fase != Fase.Jogando,
+                $"empacou a {P2.Distancia(p.Jogador.Pos, destino):0.0} m do quadro, " +
+                $"andar {p.Jogador.Andar} de {andarDestino}");
         }
     }
 }

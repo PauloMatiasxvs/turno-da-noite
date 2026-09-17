@@ -14,14 +14,17 @@ namespace TurnoDaNoite.Core
     public sealed class Recipiente
     {
         public P2 Pos;
+        public int Andar;
         public TipoRecipiente Tipo;
         public bool Aberto;
 
         /// <summary>Índice do item guardado aqui, ou -1 se estiver vazio.</summary>
         public int FusivelDentro = -1;
         public int BateriaDentro = -1;
+        /// <summary>A planta do prédio está aqui. Só um recipiente no mapa inteiro tem.</summary>
+        public bool MapaDentro;
 
-        public bool TemAlgo => FusivelDentro >= 0 || BateriaDentro >= 0;
+        public bool TemAlgo => FusivelDentro >= 0 || BateriaDentro >= 0 || MapaDentro;
 
         public string Nome => Tipo switch
         {

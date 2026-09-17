@@ -52,8 +52,19 @@ namespace TurnoDaNoite.Jogo
         }
         readonly List<NoRecipiente> _recipientes = new();
 
+        Mapa _mapa;
+        Pausa _telaPausa;
+        bool _mapaAberto;
+        int _andarNoMapa;
+
+        /// <summary>Um nó por andar do prédio, e um por andar para móveis e cenário.</summary>
+        readonly List<Node3D> _andares = new();
+        readonly Dictionary<int, Node3D> _raizPorAndar = new();
+        int _andarDesenhado = -1;
+
         StandardMaterial3D _matParede, _matPiso, _matTeto, _matArmario,
-                           _matQuadro, _matFusivel, _matBateria, _matCriatura, _matPortao;
+                           _matQuadro, _matFusivel, _matBateria, _matCriatura, _matPortao, _matMapa;
+        Node3D _mapaNo;
 
         float _giro, _inclinacao;
         bool _mouseCapturado;
@@ -82,6 +93,9 @@ namespace TurnoDaNoite.Jogo
         // encosta no recipiente que guarda o primeiro fusivel e abre ele no meio
         // da captura: a segunda foto mostra o estado aberto, que e o que interessa
         bool _verRecipiente;
+        // modos de captura do prédio de dois andares: sala do quadro lá em cima,
+        // pé da escada, e a planta aberta na tela
+        bool _verAndarDeCima, _verMapa, _verEscada;
 
         public override void _Ready()
         {
@@ -97,6 +111,9 @@ namespace TurnoDaNoite.Jogo
                 if (arg == "--semambiente") _semAmbiente = true;
                 if (arg == "--verfusivel") _verItem = true;
                 if (arg == "--verrecipiente") _verRecipiente = true;
+                if (arg == "--vercima") _verAndarDeCima = true;
+                if (arg == "--vermapa") _verMapa = true;
+                if (arg == "--verescada") _verEscada = true;
             }
 
             Opcoes.Carregar();
@@ -115,6 +132,15 @@ namespace TurnoDaNoite.Jogo
 
             _hud = new Hud();
             AddChild(_hud);
+
+            _mapa = new Mapa();
+            AddChild(_mapa);
+
+            _telaPausa = new Pausa();
+            _telaPausa.AoVoltar += () => { if (_pausado) AlternarPausa(); };
+            _telaPausa.AoRecomecar += () => GetTree().ReloadCurrentScene();
+            _telaPausa.AoSair += () => GetTree().Quit();
+            AddChild(_telaPausa);
 
             // Abre no menu, com historia e opcoes. Sem isto a pessoa cai no escuro
             // sem saber o que fazer, que foi exatamente o que aconteceu.
@@ -160,6 +186,7 @@ namespace TurnoDaNoite.Jogo
             _matFusivel = Brilho(new Color(1f, 0.72f, 0.20f), 1.8f);
             _matBateria = Brilho(new Color(0.35f, 0.9f, 0.55f), 1.4f);
             _matPortao = Fosco(new Color(0.24f, 0.11f, 0.11f), 0.8f);
+            _matMapa = Brilho(new Color(0.86f, 0.78f, 0.55f), 0.7f);
         }
 
         /// <summary>
@@ -332,26 +359,46 @@ namespace TurnoDaNoite.Jogo
                 foreach (var n in TodosOsNos(f)) yield return n;
         }
 
+        /// <summary>
+        /// Monta os dois andares. Cada um vira um nó próprio, deslocado na
+        /// altura, e o andar em que o jogador não está fica ESCONDIDO —
+        /// não por performance, mas porque a laje é opaca de verdade: deixar
+        /// os dois visíveis faria você enxergar móveis flutuando pelo teto.
+        /// </summary>
         void MontarPredio()
         {
             var raiz = new Node3D { Name = "Predio" };
             AddChild(raiz);
 
-            float lado = Mathf.Max(_partida.Predio.Largura, _partida.Predio.Profundidade) * Predio.Celula + 12f;
+            var predio = _partida.Predio;
+            float lado = Mathf.Max(predio.Largura, predio.Profundidade) * Predio.Celula + 12f;
+
+            for (int andar = 0; andar < predio.Andares; andar++)
+            {
+                var noDoAndar = new Node3D
+                {
+                    Name = $"Andar{andar}",
+                    Position = new Vector3(0, Predio.AlturaDoAndar(andar), 0)
+                };
+                raiz.AddChild(noDoAndar);
+                _andares.Add(noDoAndar);
+
+                MontarUmAndar(noDoAndar, andar, lado);
+            }
+
+            MontarEscadas(raiz);
+        }
+
+        void MontarUmAndar(Node3D raiz, int andar, float lado)
+        {
+            var predio = _partida.Predio;
 
             var piso = Props.Criar(Peca.Piso, new Vector3(lado, 0.1f, lado), _matPiso);
             raiz.AddChild(piso);
 
-            // O teto cobre so o predio: o patio externo tem de ficar sob o ceu,
-            // senao "entrar no predio" nao se distingue de andar num corredor.
-            float ateAPorta = (Predio.PortaZ - _partida.Predio.Profundidade / 2f + 0.5f) * Predio.Celula;
-            float comprimentoDoTeto = ateAPorta + lado / 2f;
-            var teto = Props.Criar(Peca.Teto, new Vector3(lado, 0.1f, comprimentoDoTeto), _matTeto);
-            teto.Position = new Vector3(0, Predio.PeDireito, ateAPorta - comprimentoDoTeto / 2f);
-            teto.RotateZ(Mathf.Pi);   // vira a face para baixo
-            raiz.AddChild(teto);
+            MontarTeto(raiz, andar, lado);
 
-            foreach (var (centro, largura) in _partida.Predio.BlocosDeParede())
+            foreach (var (centro, largura) in predio.BlocosDeParede(andar))
             {
                 var parede = Props.Criar(Peca.Parede,
                     new Vector3(largura, Predio.PeDireito, Predio.Celula), _matParede);
@@ -361,9 +408,11 @@ namespace TurnoDaNoite.Jogo
 
             // luminárias mortas por sala; uma em cada quatro ainda pisca
             int n = 0;
-            foreach (var sala in _partida.Predio.Salas)
+            foreach (var sala in predio.Salas)
             {
-                var m = _partida.Predio.ParaMundo(sala.Centro);
+                if (sala.Andar != andar) continue;
+
+                var m = predio.ParaMundo(sala.Centro);
                 var lum = Props.Criar(Peca.Luminaria, new Vector3(1.2f, 0.12f, 0.3f), _matTeto);
                 lum.Position = new Vector3(m.X, Predio.PeDireito - 0.2f, m.Z);
                 raiz.AddChild(lum);
@@ -384,6 +433,111 @@ namespace TurnoDaNoite.Jogo
             }
         }
 
+        /// <summary>
+        /// O teto de um andar, com BURACO em cima de cada escada.
+        ///
+        /// Vai em faixas, uma por fileira da grade, em vez de um plano só. A
+        /// razão é o buraco: com o teto inteiriço, a escada subia e batia numa
+        /// laje fechada — lia como escada de mentira encostada na parede, e não
+        /// como passagem para o andar de cima. Uma faixa por fileira custa umas
+        /// trinta e poucas malhas por andar, que é barato pelo que resolve.
+        ///
+        /// O teto cobre só o prédio: o pátio externo fica sob o céu, senão
+        /// "entrar no prédio" não se distingue de andar num corredor.
+        /// </summary>
+        void MontarTeto(Node3D raiz, int andar, float lado)
+        {
+            var predio = _partida.Predio;
+
+            for (int cz = 0; cz <= predio.PortaZ; cz++)
+            {
+                // onde este fileira tem poço de escada
+                var buracos = new List<int>();
+                foreach (var e in predio.Escadas)
+                    if (e.Cz == cz && (e.De == andar || e.Para == andar)) buracos.Add(e.Cx);
+                buracos.Sort();
+
+                var m = predio.ParaMundo(new Celula(0, cz, andar));
+                float z = m.Z;
+                float x0 = -predio.Largura / 2f * Predio.Celula;
+
+                int inicio = 0;
+                foreach (int furo in buracos)
+                {
+                    if (furo > inicio) Faixa(raiz, x0, inicio, furo, z);
+                    inicio = furo + 1;
+                }
+                if (inicio < predio.Largura) Faixa(raiz, x0, inicio, predio.Largura, z);
+            }
+
+            // uma borda de teto além da porta, para o beiral aparecer de fora
+            var beiral = Props.Criar(Peca.Teto, new Vector3(lado, 0.1f, Predio.Celula), _matTeto);
+            beiral.Position = new Vector3(0, Predio.PeDireito,
+                (predio.PortaZ - predio.Profundidade / 2f + 1.5f) * Predio.Celula);
+            beiral.RotateZ(Mathf.Pi);
+            raiz.AddChild(beiral);
+        }
+
+        void Faixa(Node3D raiz, float x0, int de, int ate, float z)
+        {
+            float largura = (ate - de) * Predio.Celula;
+            var no = Props.Criar(Peca.Teto, new Vector3(largura, 0.1f, Predio.Celula), _matTeto);
+            no.Position = new Vector3(x0 + (de * Predio.Celula) + largura / 2, Predio.PeDireito, z);
+            no.RotateZ(Mathf.Pi);   // vira a face para baixo
+            raiz.AddChild(no);
+        }
+
+        /// <summary>
+        /// Desenha os lances de escada. Ficam fora dos nós de andar porque
+        /// atravessam os dois: escondendo com o andar, você chegaria em cima e
+        /// veria o vão por onde subiu desaparecer atrás de você.
+        /// </summary>
+        void MontarEscadas(Node3D raiz)
+        {
+            foreach (var e in _partida.Predio.Escadas)
+            {
+                var m = _partida.Predio.ParaMundo(new Celula(e.Cx, e.Cz, e.De));
+                var lance = Modelos.Escada(Predio.PeDireito + Predio.EspessuraLaje, Predio.Celula);
+                lance.Position = new Vector3(m.X, Predio.AlturaDoAndar(e.De), m.Z);
+                raiz.AddChild(lance);
+            }
+        }
+
+        /// <summary>
+        /// Mostra só o andar em que o jogador está. O de cima tem laje opaca,
+        /// mas a escada é um buraco nela: sem esconder, dava para ver os móveis
+        /// do outro piso pelo vão e, pior, o facho da lanterna iluminava lá.
+        /// </summary>
+        void MostrarApenasOAndar(int andar)
+        {
+            if (andar == _andarDesenhado) return;
+            _andarDesenhado = andar;
+
+            for (int i = 0; i < _andares.Count; i++) _andares[i].Visible = i == andar;
+            if (_raizPorAndar.TryGetValue(0, out var baixo)) baixo.Visible = andar == 0;
+            if (_raizPorAndar.TryGetValue(1, out var cima)) cima.Visible = andar == 1;
+        }
+
+        /// <summary>
+        /// Onde pendurar uma coisa que está num andar. Tudo o que o jogo
+        /// coloca no mundo passa por aqui: assim ninguém esquece de somar a
+        /// altura do piso, que é o erro que faz o móvel do primeiro andar
+        /// nascer enterrado no térreo.
+        /// </summary>
+        Node3D RaizDoAndar(int andar)
+        {
+            if (_raizPorAndar.TryGetValue(andar, out var pronta)) return pronta;
+
+            var no = new Node3D
+            {
+                Name = $"Coisas{andar}",
+                Position = new Vector3(0, Predio.AlturaDoAndar(andar), 0)
+            };
+            AddChild(no);
+            _raizPorAndar[andar] = no;
+            return no;
+        }
+
         void MontarItens()
         {
             _raizItens = new Node3D { Name = "Itens" };
@@ -395,17 +549,17 @@ namespace TurnoDaNoite.Jogo
             {
                 var no = Props.Criar(Peca.Armario, new Vector3(1.0f, 2.0f, 0.62f), _matArmario);
                 no.Position = new Vector3(a.Pos.X, 0, a.Pos.Z);
-                _raizArmarios.AddChild(no);
+                RaizDoAndar(a.Andar).AddChild(no);
             }
 
             var quadro = Props.Criar(Peca.QuadroEletrico, new Vector3(1.5f, 1.9f, 0.42f), _matQuadro);
             quadro.Position = new Vector3(_partida.Quadro.X, 0.35f, _partida.Quadro.Z);
-            AddChild(quadro);
+            RaizDoAndar(_partida.QuadroAndar).AddChild(quadro);
 
             var portao = Props.Criar(Peca.Portao, new Vector3(2.4f, 3.2f, 0.3f), _matPortao);
             portao.Position = new Vector3(_partida.Portao.X, 0, _partida.Portao.Z);
             portao.Name = "Portao";
-            AddChild(portao);
+            RaizDoAndar(0).AddChild(portao);
 
             MontarRecipientes();
             MontarCenario();
@@ -414,15 +568,22 @@ namespace TurnoDaNoite.Jogo
             {
                 var no = Props.Criar(Peca.Fusivel, new Vector3(0.2f, 0.34f, 0.2f), _matFusivel);
                 no.Position = PosicaoDoItem(f);
-                _raizItens.AddChild(no);
+                RaizDoAndar(f.Andar).AddChild(no);
                 _fusiveis.Add(no);
             }
             foreach (var b in _partida.Baterias)
             {
                 var no = Props.Criar(Peca.Bateria, new Vector3(0.16f, 0.26f, 0.16f), _matBateria);
                 no.Position = PosicaoDoItem(b);
-                _raizItens.AddChild(no);
+                RaizDoAndar(b.Andar).AddChild(no);
                 _baterias.Add(no);
+            }
+
+            if (_partida.MapaItem != null)
+            {
+                _mapaNo = Props.Criar(Peca.Planta, new Vector3(0.3f, 0.02f, 0.22f), _matMapa);
+                _mapaNo.Position = PosicaoDoItem(_partida.MapaItem);
+                RaizDoAndar(_partida.MapaItem.Andar).AddChild(_mapaNo);
             }
 
             _criatura = Props.Criar(Peca.Criatura, new Vector3(0.7f, 2.35f, 0.5f), _matCriatura);
@@ -473,7 +634,7 @@ namespace TurnoDaNoite.Jogo
                 no.Position = new Vector3(r.Pos.X, 0, r.Pos.Z);
                 // gira cada um um pouco: fileira de móveis alinhados denuncia grade
                 no.RotateY(Mathf.Tau * (Mathf.Abs(r.Pos.X * 7.13f + r.Pos.Z * 3.31f) % 1f));
-                raiz.AddChild(no);
+                RaizDoAndar(r.Andar).AddChild(no);
 
                 _recipientes.Add(new NoRecipiente
                 {
@@ -509,7 +670,7 @@ namespace TurnoDaNoite.Jogo
 
                 no.Position = new Vector3(a.Pos.X, 0, a.Pos.Z);
                 no.RotateY(a.Giro);
-                raiz.AddChild(no);
+                RaizDoAndar(a.Andar).AddChild(no);
             }
         }
 
@@ -585,11 +746,22 @@ namespace TurnoDaNoite.Jogo
             {
                 switch (k.Keycode)
                 {
-                    case Key.Escape: if (_naAbertura) _menu?.Avancar(); else AlternarPausa(); break;
+                    case Key.Escape:
+                        if (_naAbertura) _menu?.Avancar();
+                        else if (_mapaAberto) AlternarMapa();   // mapa aberto: Esc fecha o mapa
+                        else AlternarPausa();
+                        break;
+
                     // sair de verdade. Sem isto só restava Alt+F4, e ninguém
-                    // deveria precisar descobrir isso sozinho.
-                    case Key.Q: if (_pausado) GetTree().Quit(); break;
-                    case Key.E: if (!_pausado) _interagirPedido = true; break;
+                    // deveria precisar descobrir isso sozinho. Com o mapa aberto
+                    // o Q troca de andar, que é o outro uso natural da tecla.
+                    case Key.Q:
+                        if (_pausado) GetTree().Quit();
+                        else if (_mapaAberto) TrocarAndarDoMapa();
+                        break;
+
+                    case Key.Tab: if (!_pausado && !_naAbertura) AlternarMapa(); break;
+                    case Key.E: if (!_pausado && !_mapaAberto) _interagirPedido = true; break;
                     case Key.F: if (!_pausado) _lanternaPedida = true; break;
                     case Key.Minus: Opcoes.AjustarSensibilidade(-1); break;
                     case Key.Equal: Opcoes.AjustarSensibilidade(1); break;
@@ -652,15 +824,50 @@ namespace TurnoDaNoite.Jogo
         {
             _pausado = !_pausado;
             CapturarMouse(!_pausado);
+
+            // fecha o mapa junto: pausar com o mapa aberto deixava dois
+            // painéis empilhados e o clique não chegava em nenhum botão
+            if (_pausado) { _mapaAberto = false; _mapa?.Esconder(); _telaPausa?.Abrir(); }
+            else _telaPausa?.Fechar();
         }
 
-        Comando LerComando()
+        /// <summary>
+        /// Abre e fecha a planta. Só funciona depois de achar o item — apertar
+        /// TAB sem ele tem de dizer por que não abriu, senão parece defeito.
+        /// </summary>
+        void AlternarMapa()
+        {
+            if (!_partida.Jogador.TemMapa) { _hud?.Avisar("você não tem a planta do prédio"); return; }
+
+            _mapaAberto = !_mapaAberto;
+            if (_mapaAberto)
+            {
+                _andarNoMapa = _partida.Jogador.Andar;
+                _mapa.Mostrar(_partida, _andarNoMapa);
+            }
+            else _mapa.Esconder();
+        }
+
+        void TrocarAndarDoMapa()
+        {
+            _andarNoMapa = (_andarNoMapa + 1) % _partida.Predio.Andares;
+            _mapa.Mostrar(_partida, _andarNoMapa);
+        }
+
+        /// <summary>
+        /// Lê teclado e monta o comando. Com a planta aberta você para de andar
+        /// mas o mundo não para: é o preço de consultar o mapa no meio do turno.
+        /// </summary>
+        Comando LerComando(bool olhandoOMapa = false)
         {
             float fx = 0, fz = 0;
-            if (Input.IsKeyPressed(Key.W)) fz -= 1;
-            if (Input.IsKeyPressed(Key.S)) fz += 1;
-            if (Input.IsKeyPressed(Key.D)) fx += 1;
-            if (Input.IsKeyPressed(Key.A)) fx -= 1;
+            if (!olhandoOMapa)
+            {
+                if (Input.IsKeyPressed(Key.W)) fz -= 1;
+                if (Input.IsKeyPressed(Key.S)) fz += 1;
+                if (Input.IsKeyPressed(Key.D)) fx += 1;
+                if (Input.IsKeyPressed(Key.A)) fx -= 1;
+            }
 
             // A conversão mora no núcleo e tem teste: escrita à mão aqui, um
             // sinal trocado fazia o W andar para trás em metade das direções.
@@ -696,7 +903,21 @@ namespace TurnoDaNoite.Jogo
                 // e gira a câmera devagar para não fotografar sempre a mesma parede
                 if (!_naAbertura)
                 {
-                    if (_verRecipiente)
+                    if (_verAndarDeCima)
+                    {
+                        _partida.Jogador.Pos = new P2(_partida.Quadro.X, _partida.Quadro.Z + 4.5f);
+                        _partida.Jogador.Andar = _partida.QuadroAndar;
+                        _giro = 0; _inclinacao = -0.10f;
+                    }
+                    else if (_verEscada)
+                    {
+                        var e = _partida.Predio.Escadas[0];
+                        var m = _partida.Predio.ParaMundo(new Celula(e.Cx, e.Cz, e.De));
+                        _partida.Jogador.Pos = new P2(m.X, m.Z + 5.5f);
+                        _partida.Jogador.Andar = e.De;
+                        _giro = 0; _inclinacao = 0.06f;
+                    }
+                    else if (_verRecipiente)
                     {
                         var rec = _partida.Recipientes[_partida.Fusiveis[0].Dentro];
                         _partida.Jogador.Pos = new P2(rec.Pos.X, rec.Pos.Z + 1.7f);
@@ -712,7 +933,7 @@ namespace TurnoDaNoite.Jogo
                     }
                     else { _partida.Passo(1f / 60f, new Comando()); _giro += dt * 0.35f; }
                 }
-                if (!_verRecipiente)
+                if (!_verRecipiente && !_verAndarDeCima && !_verEscada)
                     _inclinacao = -0.14f;   // olha um pouco para baixo: mostra chao e parede
                 _quadrosDeFoto++;
                 SincronizarCamera(dt);
@@ -739,16 +960,34 @@ namespace TurnoDaNoite.Jogo
                 if (_quadrosDeFoto == 160 && _menu != null) _menu.PularTudo();
                 // abre o recipiente entre uma foto e outra: dá para comparar
                 if (_quadrosDeFoto == 240 && _verRecipiente) _partida.Interagir();
+                if (_quadrosDeFoto == 200 && _verMapa)
+                {
+                    // finge que a planta foi achada e marca algumas salas como
+                    // vistas, senão a captura sai com o mapa em branco
+                    _partida.Jogador.TemMapa = true;
+                    _partida.RevelarTudoParaCaptura();
+                    _andarNoMapa = _partida.Jogador.Andar;
+                    _mapaAberto = true;
+                    _mapa.Mostrar(_partida, _andarNoMapa);
+                }
                 if (_quadrosDeFoto == 330) TirarFoto("res://captura_2.png");
                 if (_quadrosDeFoto >= 340) GetTree().Quit();
                 return;
             }
 
+            // O mapa NÃO pausa o jogo: olhar a planta tem de custar tempo real,
+            // senão vira um botão de "pensar de graça" no meio da perseguição.
             if (_partida.Fase == Fase.Jogando && !_pausado && !_naAbertura)
             {
-                _partida.Passo(dt, LerComando());
+                _partida.Passo(dt, LerComando(_mapaAberto));
                 foreach (var ev in _partida.Eventos) Som.Tocar(this, ev, _partida);
             }
+
+            if (_mapaAberto) _mapa.QueueRedraw();
+            if (_pausado) _telaPausa?.Atualizar();
+            // HUD some com o mapa aberto: os dois na tela ao mesmo tempo
+            // escreviam um por cima do outro
+            if (_hud != null) _hud.Visible = !_mapaAberto;
 
             SincronizarCamera(dt);
             SincronizarItens(dt);
@@ -766,8 +1005,12 @@ namespace TurnoDaNoite.Jogo
             float sobe = Mathf.Sin(_balanco) * alvo;
             float tremor = j.Medo > 0.55f ? (GD.Randf() - 0.5f) * (j.Medo - 0.55f) * 0.05f : 0f;
 
-            _camera.Position = new Vector3(j.Pos.X, j.AlturaOlho + sobe + tremor, j.Pos.Z);
+            // a altura do andar entra aqui: sem ela, subir a escada deixava a
+            // câmera no térreo olhando para dentro da laje
+            float pisoDoAndar = Predio.AlturaDoAndar(j.Andar);
+            _camera.Position = new Vector3(j.Pos.X, pisoDoAndar + j.AlturaOlho + sobe + tremor, j.Pos.Z);
             _camera.Rotation = new Vector3(_inclinacao, _giro, Mathf.Cos(_balanco * 0.5f) * 0.006f);
+            MostrarApenasOAndar(j.Andar);
 
             // o holofote fica um pouco a frente da mao, para o corpo da lanterna
             // nao tapar a propria luz
@@ -812,6 +1055,12 @@ namespace TurnoDaNoite.Jogo
                 var b = _partida.Baterias[i];
                 _baterias[i].Visible = !b.Recolhido && Revelado(b);
                 _baterias[i].RotateY(dt * 0.6f);
+            }
+
+            if (_mapaNo != null && _partida.MapaItem != null)
+            {
+                _mapaNo.Visible = !_partida.MapaItem.Recolhido && Revelado(_partida.MapaItem);
+                _mapaNo.RotateY(dt * 0.4f);
             }
 
             var portao = GetNodeOrNull<Node3D>("Portao");
@@ -860,7 +1109,10 @@ namespace TurnoDaNoite.Jogo
         void SincronizarCriatura(float dt)
         {
             var ela = _partida.Ela;
-            _criatura.Position = new Vector3(ela.Pos.X, 0, ela.Pos.Z);
+            _criatura.Position = new Vector3(ela.Pos.X, Predio.AlturaDoAndar(ela.Andar), ela.Pos.Z);
+            // não desenha a criatura que está no outro piso: sem isto ela
+            // aparece atravessando o chão quando passa embaixo de você
+            _criatura.Visible = ela.Andar == _partida.Jogador.Andar;
             var dir = ela.Direcao;
             _criatura.Rotation = new Vector3(0, Mathf.Atan2(dir.X, dir.Z) + GiroDoModelo, 0);
 
@@ -905,6 +1157,15 @@ namespace TurnoDaNoite.Jogo
                    _recipientes.Count == _partida.Recipientes.Count && _recipientes.Count >= 20);
             Checar("todo recipiente tem peça móvel",
                    _recipientes.TrueForAll(r => r.Tampa != null));
+
+            int salas0 = 0, salas1 = 0;
+            foreach (var s in _partida.Predio.Salas) { if (s.Andar == 0) salas0++; else salas1++; }
+            Checar($"cômodos: {salas0} no térreo, {salas1} em cima", salas0 >= 8 && salas1 >= 8);
+            Checar($"nós de andar montados ({_andares.Count})", _andares.Count == _partida.Predio.Andares);
+            Checar($"escadas ({_partida.Predio.Escadas.Count})", _partida.Predio.Escadas.Count >= 2);
+            Checar($"quadro no andar {_partida.QuadroAndar}", _partida.QuadroAndar >= 0);
+            Checar("planta do prédio existe e está guardada",
+                   _partida.MapaItem != null && _partida.MapaItem.Dentro >= 0);
             Checar("câmera criada", _camera != null);
             Checar("lanterna criada", _lanterna != null);
             Checar("criatura na cena", _criatura != null);

@@ -79,6 +79,9 @@ namespace TurnoDaNoite.Core
             Evento.PortaoBateu     => new Receita(0.80f, 140,  38,   0.52f, 0.45f),
             Evento.AbriuRecipiente => new Receita(0.40f, 520,  180,  0.28f, 0.70f),
             Evento.RecipienteVazio => new Receita(0.34f, 380,  150,  0.22f, 0.75f),
+            // degrau de metal: impacto seco e metálico, e mais alto que a pisada
+            Evento.Escada          => new Receita(0.34f, 260,  95,   0.30f, 0.90f, 0.003f, 2.4f, 0.50f),
+            Evento.PegouMapa       => new Receita(0.30f, 900,  1400, 0.24f, 0.55f, 0.006f, 2.0f, 0.40f),
             _ => default
         };
 

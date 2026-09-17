@@ -101,26 +101,34 @@ namespace TurnoDaNoite.Jogo
             _centro.Text =
                 "TURNO DA NOITE\n\n" +
                 "Você é o vigia. A energia caiu às 2h14.\n" +
-                "Ache CINCO FUSÍVEIS espalhados pelo prédio,\n" +
-                "leve ao QUADRO ELÉTRICO e volte ao PORTÃO.\n\n" +
-                "Você não tem arma. Tem algo aqui embaixo.\n\n" +
+                "Ache CINCO FUSÍVEIS revistando os móveis,\n" +
+                "leve ao QUADRO ELÉTRICO e volte à PORTA.\n\n" +
+                "O prédio tem dois andares. O quadro fica em cima.\n" +
+                "Procure também a PLANTA DO PRÉDIO: é ela que libera o mapa.\n\n" +
+                "Você não tem arma. Tem algo aqui dentro.\n\n" +
                 "W A S D andar   ·   Mouse olhar   ·   F lanterna\n" +
-                "E pegar e usar   ·   Shift correr   ·   Ctrl agachar\n" +
-                "TAB mostra para onde ir   ·   ESC pausa\n\n" +
+                "E revistar e pegar   ·   Shift correr   ·   Ctrl agachar\n" +
+                "TAB abre a planta   ·   ESC pausa e sai\n\n" +
                 "clique para começar";
             _centro.AddThemeColorOverride("font_color", Osso);
         }
 
+        /// <summary>Recado curto no centro-baixo da tela, que some sozinho.</summary>
+        public void Avisar(string texto)
+        {
+            _aviso = texto;
+            _tempoAviso = 2.4f;
+        }
+        string _aviso = "";
+        float _tempoAviso;
+
         public void Atualizar(Partida p, bool pausado = false, string bussola = null)
         {
-            if (pausado)
-            {
-                // Sem este aviso o Esc parecia não fazer nada: o mouse era
-                // liberado e mais nada mudava na tela.
-                _centro.Text = "PAUSADO\n\nESC — voltar ao jogo\nQ — sair do jogo\nF5 — recomeçar\n\n- e =  ajustam a sensibilidade do mouse";
-                _centro.AddThemeColorOverride("font_color", Osso);
-                return;
-            }
+            // Pausado quem desenha é a tela de Pausa, que tem botões de verdade.
+            // Enquanto era só um texto aqui no meio da tela, sobre o cenário
+            // escuro, ele sumia — e "aperto Esc e não acontece nada" virou
+            // reclamação duas vezes.
+            if (pausado) return;
 
             // abertura: o preto some devagar, o jogo nasce do escuro
             if (_escuro.Color.A > 0)
@@ -147,8 +155,10 @@ namespace TurnoDaNoite.Jogo
             else
                 tarefa = "ACHE CINCO FUSÍVEIS PELO PRÉDIO";
 
-            var sala = p.Predio.SalaEm(j.Pos);
-            _objetivo.Text = tarefa + (sala != null ? $"\nvocê está: {sala.Nome}" : "\nvocê está: corredor");
+            var sala = p.Predio.SalaEm(j.Pos, j.Andar);
+            string andar = j.Andar == 0 ? "térreo" : $"{j.Andar}º andar";
+            string onde = sala != null ? sala.Nome : "corredor";
+            _objetivo.Text = $"{tarefa}\nvocê está: {onde} · {andar}";
 
             _bussola.Text = bussola ?? "";
 
@@ -161,8 +171,9 @@ namespace TurnoDaNoite.Jogo
             _tempoSens = Mathf.Max(0, _tempoSens - 0.016f);
             _sensibilidade.Text = _tempoSens > 0 ? $"sensibilidade do mouse: {Opcoes.Porcentagem}%" : "";
 
-            _dica.Text = j.Escondido
-                ? "E sai · ESPAÇO prende a respiração"
+            _tempoAviso = Mathf.Max(0, _tempoAviso - 0.016f);
+            _dica.Text = _tempoAviso > 0 ? _aviso
+                : j.Escondido ? "E sai · ESPAÇO prende a respiração"
                 : DicaDoAlvo(p);
 
             _centro.Text = p.Fase switch
@@ -179,6 +190,7 @@ namespace TurnoDaNoite.Jogo
             return p.AlvoMaisPerto(out var obj) switch
             {
                 Partida.Alvo.Recipiente => $"E — revistar {((Recipiente)obj).Nome}",
+                Partida.Alvo.Mapa => "E — pegar a planta do prédio",
                 Partida.Alvo.Fusivel => "E — pegar fusível",
                 Partida.Alvo.Bateria => "E — pegar bateria",
                 Partida.Alvo.Armario => "E — se esconder",

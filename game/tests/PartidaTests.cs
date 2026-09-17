@@ -28,16 +28,68 @@ namespace TurnoDaNoite.Tests
         /// Vai até o ponto e recolhe o que estiver ali. Desde que os itens passaram
         /// a ficar guardados, pegar algo são dois gestos: abrir e então pegar.
         /// </summary>
-        public static void Recolher(this Partida p, P2 onde)
+        public static void Recolher(this Partida p, P2 onde, int andar = 0)
         {
             p.Jogador.Pos = onde;
+            p.Jogador.Andar = andar;    // o prédio tem dois: posição sozinha não basta
             p.Interagir();      // abre o recipiente
             p.Interagir();      // pega o que estava dentro
+        }
+
+        /// <summary>Teleporta a criatura, andar incluído. Esquecer o andar deixa ela num piso e o teste no outro.</summary>
+        public static void PorElaEm(this Partida p, P2 onde, int andar = 0)
+        {
+            p.Ela.Pos = onde;
+            p.Ela.Andar = andar;
+        }
+
+        /// <summary>Teleporta o jogador, andar incluído.</summary>
+        public static void IrPara(this Partida p, P2 onde, int andar = 0)
+        {
+            p.Jogador.Pos = onde;
+            p.Jogador.Andar = andar;
         }
 
         /// <summary>Anda para a frente (norte).</summary>
         public static Comando Andando(bool correr = false, bool agachar = false) =>
             new Comando { FrenteZ = -1f, Correr = correr, Agachar = agachar };
+
+        /// <summary>
+        /// Um ponto bem longe do jogador, no andar dele. Serve para estacionar a
+        /// criatura quando o teste é sobre outra coisa: se ela pegar o jogador a
+        /// simulação congela, e o teste falha por um motivo que não é o dele.
+        /// </summary>
+        public static P2 LongeDoJogador(Partida p)
+        {
+            P2 melhor = p.Jogador.Pos;
+            float maior = -1;
+            foreach (var s in p.Predio.Salas)
+            {
+                if (s.Andar != p.Jogador.Andar) continue;
+                var m = p.Predio.ParaMundo(s.Centro);
+                float d = P2.Distancia(m, p.Jogador.Pos);
+                if (d <= maior) continue;
+                maior = d; melhor = m;
+            }
+            return melhor;
+        }
+
+        /// <summary>Duas salas do mesmo andar que não se enxergam. Usada para provar que parede bloqueia.</summary>
+        public static (P2 a, P2 b) ParSemLinhaDeVisao(Partida p)
+        {
+            var doAndar = new List<Sala>();
+            foreach (var s in p.Predio.Salas)
+                if (s.Andar == 0 && s.Tipo != TipoSala.Patio) doAndar.Add(s);
+
+            for (int i = 0; i < doAndar.Count; i++)
+                for (int j = i + 1; j < doAndar.Count; j++)
+                {
+                    var a = p.Predio.ParaMundo(doAndar[i].Centro);
+                    var b = p.Predio.ParaMundo(doAndar[j].Centro);
+                    if (!p.Predio.Visivel(a, b, 0)) return (a, b);
+                }
+            return (default, default);
+        }
     }
 
     public class PlantaTests
@@ -58,14 +110,69 @@ namespace TurnoDaNoite.Tests
         }
 
         [Fact]
-        public void NoveSalasComNomes()
+        public void MuitasSalasComNomeEDoTamanhoDeComodo()
         {
             var p = Ajuda.Nova();
-            // 10 com o patio externo, que entrou quando o jogo passou a comecar
-            // do lado de fora e voce precisar entrar no predio
-            Assert.Equal(10, p.Predio.Salas.Count);
+            // A planta é gerada, então o número exato varia; o que não pode
+            // variar é haver MUITOS cômodos. Com dez salas de trinta metros o
+            // prédio lia como um galpão só, que foi a reclamação que originou
+            // este teste.
+            Assert.True(p.Predio.Salas.Count >= 16,
+                $"só {p.Predio.Salas.Count} cômodos: isso é um galpão, não um prédio");
+
             Assert.NotNull(p.Predio.Sala(TipoSala.Patio));
-            foreach (var s in p.Predio.Salas) Assert.False(string.IsNullOrWhiteSpace(s.Nome));
+            Assert.NotNull(p.Predio.Sala(TipoSala.Portaria));
+            Assert.NotNull(p.Predio.Sala(TipoSala.Quadro));
+            Assert.NotNull(p.Predio.Sala(TipoSala.Camara));
+
+            foreach (var s in p.Predio.Salas)
+            {
+                Assert.False(string.IsNullOrWhiteSpace(s.Nome));
+                if (s.Tipo == TipoSala.Patio) continue;
+                float maiorLado = Math.Max(s.Larg, s.Alt) * Predio.Celula;
+                Assert.True(maiorLado <= 22f, $"{s.Nome} tem {maiorLado:0} m de lado: é um galpão");
+            }
+        }
+
+        [Fact]
+        public void OsDoisAndaresExistemESaoLigadosPorEscada()
+        {
+            var p = Ajuda.Nova();
+            Assert.Equal(2, p.Predio.Andares);
+            Assert.True(p.Predio.Escadas.Count >= 2,
+                "com uma escada só, o andar de cima vira ratoeira sem saída");
+
+            bool temSalaEmCima = false;
+            foreach (var s in p.Predio.Salas) if (s.Andar == 1) temSalaEmCima = true;
+            Assert.True(temSalaEmCima, "o andar de cima ficou vazio");
+
+            foreach (var e in p.Predio.Escadas)
+            {
+                Assert.False(p.Predio.EhParede(e.Cx, e.Cz, e.De));
+                Assert.False(p.Predio.EhParede(e.Cx, e.Cz, e.Para));
+            }
+        }
+
+        [Fact]
+        public void CorredorEhCorredorENaoSalao()
+        {
+            var p = Ajuda.Nova();
+            // conta quantas células livres do térreo estão fora de qualquer sala:
+            // são os corredores. Com corredor de 3 células eles eram metade do
+            // prédio; com 1 célula têm de ser uma fatia pequena.
+            int livres = 0, emCorredor = 0;
+            for (int z = 0; z < p.Predio.Profundidade; z++)
+                for (int x = 0; x < p.Predio.Largura; x++)
+                {
+                    if (p.Predio.EhParede(x, z, 0)) continue;
+                    livres++;
+                    var mundo = p.Predio.ParaMundo(new Celula(x, z, 0));
+                    if (p.Predio.SalaEm(mundo, 0) == null) emCorredor++;
+                }
+
+            Assert.True(livres > 0);
+            float fatia = emCorredor / (float)livres;
+            Assert.True(fatia < 0.30f, $"{fatia:P0} do andar é corredor: virou salão de novo");
         }
 
         [Fact]
@@ -97,15 +204,14 @@ namespace TurnoDaNoite.Tests
         public void ParedeBloqueiaLinhaDeVisao()
         {
             var p = Ajuda.Nova();
-            // Portaria e camara ficam no mesmo eixo vertical e os corredores se alinham:
-            // existe linha reta livre entre elas, e isso e intencional. Para provar que
-            // a parede bloqueia, use o par diagonal, que tem massica no meio.
-            var portaria = p.Predio.ParaMundo(p.Predio.Sala(TipoSala.Portaria).Centro);
-            var escritorio = p.Predio.ParaMundo(p.Predio.Sala(TipoSala.Escritorio).Centro);
-            Assert.False(p.Predio.Visivel(portaria, escritorio));
+            // A planta e gerada, entao nao da para nomear duas salas fixas: alguns
+            // pares TEM linha reta livre, e isso e intencional. O teste procura um
+            // par que nao tem e prova que ali a parede bloqueia.
+            var (a, b) = Ajuda.ParSemLinhaDeVisao(p);
+            Assert.False(p.Predio.Visivel(a, b, 0), "nao achei nenhum par de salas com parede entre elas");
 
             // e o ponto sempre enxerga a si mesmo
-            Assert.True(p.Predio.Visivel(portaria, portaria));
+            Assert.True(p.Predio.Visivel(a, a, 0));
         }
 
         [Fact]
@@ -230,11 +336,11 @@ namespace TurnoDaNoite.Tests
             var p = Ajuda.Nova();
             // Ela precisa ficar longe: se pegar o jogador, a simulacao congela e a
             // bateria para de drenar — foi assim que este teste falhou da primeira vez.
-            var longe = p.Predio.ParaMundo(p.Predio.Sala(TipoSala.Tunel).Centro);
+            var longe = Ajuda.LongeDoJogador(p);
 
             void Correr(int segundos)
             {
-                for (int s = 0; s < segundos; s++) { p.Ela.Pos = longe; p.Rodar(1f); }
+                for (int s = 0; s < segundos; s++) { p.PorElaEm(longe, p.Jogador.Andar); p.Rodar(1f); }
             }
 
             // Dois minutos ainda tem luz: a lanterna durava 95 s e isso parecia
@@ -253,12 +359,12 @@ namespace TurnoDaNoite.Tests
         public void LanternaDuraPerto_De_CincoMinutos()
         {
             var p = Ajuda.Nova();
-            var longe = p.Predio.ParaMundo(p.Predio.Sala(TipoSala.Tunel).Centro);
+            var longe = Ajuda.LongeDoJogador(p);
 
             int segundos = 0;
             while (p.Jogador.Lanterna && segundos < 600)
             {
-                p.Ela.Pos = longe;
+                p.PorElaEm(longe, p.Jogador.Andar);
                 p.Rodar(1f);
                 segundos++;
             }
@@ -290,7 +396,7 @@ namespace TurnoDaNoite.Tests
         public void EsconderZeraOAlcance()
         {
             var p = Ajuda.Nova();
-            p.Jogador.Pos = p.Armarios[0].Pos;
+            p.IrPara(p.Armarios[0].Pos, p.Armarios[0].Andar);
             p.Interagir();
             Assert.True(p.Jogador.Escondido);
             Assert.Equal(0f, p.AlcanceDeVisao());
@@ -301,7 +407,7 @@ namespace TurnoDaNoite.Tests
     {
         static void PegarTodosOsFusiveis(Partida p)
         {
-            foreach (var f in p.Fusiveis) p.Recolher(f.Pos);
+            foreach (var f in p.Fusiveis) p.Recolher(f.Pos, f.Andar);
         }
 
         [Fact]
@@ -315,7 +421,7 @@ namespace TurnoDaNoite.Tests
         public void PegarFusivelAumentaAMao()
         {
             var p = Ajuda.Nova();
-            p.Recolher(p.Fusiveis[0].Pos);
+            p.Recolher(p.Fusiveis[0].Pos, p.Fusiveis[0].Andar);
             Assert.Equal(1, p.Jogador.FusiveisNaMao);
             Assert.True(p.Fusiveis[0].Recolhido);
         }
@@ -324,7 +430,7 @@ namespace TurnoDaNoite.Tests
         public void QuadroSemFusivelNaoInstalaNada()
         {
             var p = Ajuda.Nova();
-            p.Jogador.Pos = p.Quadro;
+            p.IrPara(p.Quadro, p.QuadroAndar);
             p.Interagir();
             Assert.Equal(0, p.Jogador.FusiveisInstalados);
             // a porta comeca ABERTA agora: voce entra por ela. O que impede de
@@ -339,7 +445,7 @@ namespace TurnoDaNoite.Tests
             PegarTodosOsFusiveis(p);
             Assert.Equal(5, p.Jogador.FusiveisNaMao);
 
-            p.Jogador.Pos = p.Quadro;
+            p.IrPara(p.Quadro, p.QuadroAndar);
             p.Interagir();
             Assert.Equal(5, p.Jogador.FusiveisInstalados);
             Assert.True(p.PortaoAberto);
@@ -349,7 +455,7 @@ namespace TurnoDaNoite.Tests
         public void PortaoTrancadoNaoDeixaSair()
         {
             var p = Ajuda.Nova();
-            p.Jogador.Pos = p.Portao;
+            p.IrPara(p.Portao, 0);
             p.Interagir();
             Assert.Equal(Fase.Jogando, p.Fase);
             Assert.Contains(Evento.PortaoTrancado, p.Eventos);
@@ -360,9 +466,9 @@ namespace TurnoDaNoite.Tests
         {
             var p = Ajuda.Nova();
             PegarTodosOsFusiveis(p);
-            p.Jogador.Pos = p.Quadro;
+            p.IrPara(p.Quadro, p.QuadroAndar);
             p.Interagir();
-            p.Jogador.Pos = p.Portao;
+            p.IrPara(p.Portao, 0);
             p.Interagir();
             Assert.Equal(Fase.Escapou, p.Fase);
         }
@@ -373,7 +479,7 @@ namespace TurnoDaNoite.Tests
             var p = Ajuda.Nova();
             float antes = p.Ela.Agressao;
             PegarTodosOsFusiveis(p);
-            p.Jogador.Pos = p.Quadro;
+            p.IrPara(p.Quadro, p.QuadroAndar);
             p.Interagir();
             Assert.True(p.Ela.Agressao > antes);
         }
@@ -384,7 +490,7 @@ namespace TurnoDaNoite.Tests
             var p = Ajuda.Nova();
             p.Rodar(40f);
             float gasta = p.Jogador.Bateria;
-            p.Recolher(p.Baterias[0].Pos);
+            p.Recolher(p.Baterias[0].Pos, p.Baterias[0].Andar);
             Assert.True(p.Jogador.Bateria > gasta);
             Assert.True(p.Jogador.Bateria <= 1f);
         }
@@ -414,7 +520,7 @@ namespace TurnoDaNoite.Tests
             var p = Ajuda.Nova();
             p.AlternarLanterna();
             // teleporta para perto e corre: o barulho de correr tem raio de 24 m
-            p.Jogador.Pos = new P2(p.Ela.Pos.X + 10f, p.Ela.Pos.Z);
+            p.IrPara(new P2(p.Ela.Pos.X + 10f, p.Ela.Pos.Z), p.Ela.Andar);
             p.Rodar(2f, Ajuda.Andando(correr: true));
             Assert.True(p.Ela.Estado != EstadoCriatura.Patrulha,
                 $"continuou em {p.Ela.Estado} mesmo com barulho ao lado");
@@ -425,7 +531,7 @@ namespace TurnoDaNoite.Tests
         {
             var p = Ajuda.Nova();
             p.AlternarLanterna();
-            p.Jogador.Pos = new P2(p.Ela.Pos.X + 12f, p.Ela.Pos.Z);
+            p.IrPara(new P2(p.Ela.Pos.X + 12f, p.Ela.Pos.Z), p.Ela.Andar);
             p.Rodar(2f, Ajuda.Andando(agachar: true));
             Assert.Equal(EstadoCriatura.Patrulha, p.Ela.Estado);
         }
@@ -450,11 +556,11 @@ namespace TurnoDaNoite.Tests
         public void EscondidoComOArPresoSobrevive()
         {
             var p = Ajuda.Nova();
-            p.Jogador.Pos = p.Armarios[0].Pos;
+            p.IrPara(p.Armarios[0].Pos, p.Armarios[0].Andar);
             p.Interagir();
             Assert.True(p.Jogador.Escondido);
 
-            p.Ela.Pos = new P2(p.Jogador.Pos.X + 1f, p.Jogador.Pos.Z);
+            p.PorElaEm(new P2(p.Jogador.Pos.X + 1f, p.Jogador.Pos.Z), p.Jogador.Andar);
             p.Ela.Estado = EstadoCriatura.Caca;
             p.Ela.Paciencia = 10f;
 
@@ -468,10 +574,10 @@ namespace TurnoDaNoite.Tests
         public void EscondidoRespirandoElaTeAcha()
         {
             var p = Ajuda.Nova();
-            p.Jogador.Pos = p.Armarios[0].Pos;
+            p.IrPara(p.Armarios[0].Pos, p.Armarios[0].Andar);
             p.Interagir();
 
-            p.Ela.Pos = new P2(p.Jogador.Pos.X + 1f, p.Jogador.Pos.Z);
+            p.PorElaEm(new P2(p.Jogador.Pos.X + 1f, p.Jogador.Pos.Z), p.Jogador.Andar);
             p.Ela.Estado = EstadoCriatura.Caca;
             p.Ela.Paciencia = 10f;
 
@@ -483,7 +589,7 @@ namespace TurnoDaNoite.Tests
         public void OArAcabaSeVoceSegurarDemais()
         {
             var p = Ajuda.Nova();
-            p.Jogador.Pos = p.Armarios[0].Pos;
+            p.IrPara(p.Armarios[0].Pos, p.Armarios[0].Andar);
             p.Interagir();
             p.Rodar(6f, new Comando { PrenderAr = true });
             Assert.Equal(0f, p.Jogador.Ar, 3);
@@ -496,7 +602,7 @@ namespace TurnoDaNoite.Tests
             p.Rodar(1f);
             float longe = p.Jogador.Medo;
 
-            p.Ela.Pos = new P2(p.Jogador.Pos.X + 3f, p.Jogador.Pos.Z);
+            p.PorElaEm(new P2(p.Jogador.Pos.X + 3f, p.Jogador.Pos.Z), p.Jogador.Andar);
             p.Rodar(1.5f);
             Assert.True(p.Jogador.Medo > longe, $"medo não subiu: {longe} -> {p.Jogador.Medo}");
         }

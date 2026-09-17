@@ -56,6 +56,29 @@ namespace TurnoDaNoite.Core
         public const float RuidoQuadro = 30f;   // instalar fusível faz barulho alto, de propósito
         /// <summary>Revistar gaveta faz barulho medio: e o preco de procurar.</summary>
         public const float RuidoRevistar = 11f;
+        /// <summary>Escada de metal em prédio vazio é das coisas mais altas que existem.</summary>
+        public const float RuidoEscada = 16f;
+
+        /// <summary>
+        /// Quanto do barulho passa pela laje. Não é zero — o andar de cima não
+        /// pode virar abrigo seguro — mas é pouco: correr lá em cima ainda a
+        /// chama, andar agachado não.
+        /// </summary>
+        public const float BarulhoAtravessaLaje = 0.45f;
+
+        /// <summary>Segundos de espera antes de a escada poder ser usada de novo.</summary>
+        public const float EsperaDaEscada = 0.8f;
+
+        // ---------------- medo, que é o que dispara o som ----------------
+        /// <summary>
+        /// A que distância ela começa a dar medo. Estava em 26 m: num prédio
+        /// onde ela circula, isso deixava o medo acima do limiar do coração
+        /// quase o tempo todo, e o baque contínuo no ouvido deixava de avisar
+        /// qualquer coisa. Aviso que toca sempre não é aviso, é barulho.
+        /// </summary>
+        public const float DistanciaQueDaMedo = 17f;
+        public const float MedoParaOCoracao = 0.62f;
+        public const float MedoParaARespiracao = 0.55f;
 
         // ---------------- o que a criatura enxerga ----------------
         // A luz acesa é o que te mata: ela te vê de quase toda a extensão do prédio.
@@ -96,9 +119,21 @@ namespace TurnoDaNoite.Core
         // ---------------- objetivo ----------------
         public const int FusiveisNecessarios = 5;
         public const int BateriasNoMapa = 4;
-        public const int ArmariosPorSala = 2;
-        /// <summary>Recipientes por sala. Com quatro, a maioria fica vazia — e e isso que faz revistar valer.</summary>
-        public const int RecipientesPorSala = 4;
+        public const int ArmariosPorSala = 1;
+        /// <summary>Recipientes por sala, nas salas que ganham algum.</summary>
+        public const int RecipientesPorSala = 2;
+
+        /// <summary>
+        /// Que fração dos cômodos ganha móveis para revistar.
+        ///
+        /// Não é 100% porque a conta importa: com nove itens escondidos, cem
+        /// gavetas dão uma chance em onze por gaveta, e o jogo vira garimpo.
+        /// Com cerca de cinquenta, é uma em cinco — procurar continua custando,
+        /// mas cada gaveta aberta é uma aposta razoável. Sala sem recipiente
+        /// também tem função: ensina que nem todo cômodo vale a visita.
+        /// </summary>
+        public const float FracaoDeSalasComRecipiente = 0.55f;
+        public const float FracaoDeSalasComArmario = 0.5f;
         /// <summary>
         /// Distância mínima entre dois móveis. Sem ela dois recipientes nasciam
         /// no mesmo ponto, um dentro do outro, e o de fora tomava a interação —

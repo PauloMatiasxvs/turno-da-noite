@@ -12,7 +12,7 @@ namespace TurnoDaNoite.Jogo
         Fusivel, Bateria, Criatura, Luminaria, Caixote, Barril, Cano,
         Mao,
         CaixaFerramentas, Gaveteiro, Prateleira,
-        Bancada, Pilha, Entulho
+        Bancada, Pilha, Entulho, Planta
     }
 
     /// <summary>
@@ -51,7 +51,8 @@ namespace TurnoDaNoite.Jogo
             { Peca.Prateleira,       "prateleira" },
             { Peca.Bancada,          "bancada" },
             { Peca.Pilha,            "pilha" },
-            { Peca.Entulho,          "entulho" }
+            { Peca.Entulho,          "entulho" },
+            { Peca.Planta,           "planta_predio" }
         };
 
         static readonly string[] Extensoes = { ".glb", ".gltf", ".obj", ".fbx", ".tscn" };
@@ -164,6 +165,7 @@ namespace TurnoDaNoite.Jogo
                 case Peca.Pilha:          return Modelos.Pilha();
                 case Peca.Entulho:        return Modelos.Entulho();
                 case Peca.Mao:            return Modelos.MaoComLanterna();
+                case Peca.Planta:         return Modelos.Planta();
             }
 
             Mesh malha = peca switch
@@ -195,7 +197,7 @@ namespace TurnoDaNoite.Jogo
             Peca.Fusivel, Peca.Bateria, Peca.Armario, Peca.QuadroEletrico,
             Peca.Portao, Peca.Caixote, Peca.Barril,
             Peca.CaixaFerramentas, Peca.Gaveteiro, Peca.Prateleira,
-            Peca.Bancada, Peca.Pilha, Peca.Entulho, Peca.Mao
+            Peca.Bancada, Peca.Pilha, Peca.Entulho, Peca.Mao, Peca.Planta
         };
 
         /// <summary>

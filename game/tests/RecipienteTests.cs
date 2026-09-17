@@ -31,7 +31,7 @@ namespace TurnoDaNoite.Tests
         {
             var p = Nova();
             var f = p.Fusiveis[0];
-            p.Jogador.Pos = f.Pos;
+            p.IrPara(f.Pos, f.Andar);
 
             p.Interagir();                       // isto abre o recipiente
             Assert.Equal(0, p.Jogador.FusiveisNaMao);
@@ -46,8 +46,8 @@ namespace TurnoDaNoite.Tests
         {
             var p = Nova();
             int comAlgo = p.Recipientes.Count(r => r.TemAlgo);
-            // 5 fusíveis + 4 baterias em muitos recipientes: procurar tem de custar
-            Assert.Equal(Regras.FusiveisNecessarios + Regras.BateriasNoMapa, comAlgo);
+            // 5 fusíveis + 4 baterias + a planta do prédio: procurar tem de custar
+            Assert.Equal(Regras.FusiveisNecessarios + Regras.BateriasNoMapa + 1, comAlgo);
             Assert.True(p.Recipientes.Count > comAlgo * 2,
                 $"só {p.Recipientes.Count} recipientes para {comAlgo} itens: acha fácil demais");
         }
@@ -59,9 +59,9 @@ namespace TurnoDaNoite.Tests
             var r = p.Recipientes.First(x => !x.Aberto);
 
             // põe a criatura ao lado e tira ela do estado de caça
-            p.Ela.Pos = new P2(r.Pos.X + 4f, r.Pos.Z);
+            p.PorElaEm(new P2(r.Pos.X + 4f, r.Pos.Z), r.Andar);
             p.Ela.Estado = EstadoCriatura.Patrulha;
-            p.Jogador.Pos = r.Pos;
+            p.IrPara(r.Pos, r.Andar);
 
             p.Interagir();
             Assert.NotEqual(EstadoCriatura.Patrulha, p.Ela.Estado);
@@ -72,7 +72,7 @@ namespace TurnoDaNoite.Tests
         {
             var p = Nova();
             var vazio = p.Recipientes.First(r => !r.TemAlgo);
-            p.Jogador.Pos = vazio.Pos;
+            p.IrPara(vazio.Pos, vazio.Andar);
             p.Interagir();
             Assert.Contains(Evento.RecipienteVazio, p.Eventos);
         }
@@ -82,7 +82,7 @@ namespace TurnoDaNoite.Tests
         {
             var p = Nova();
             var cheio = p.Recipientes.First(r => r.TemAlgo);
-            p.Jogador.Pos = cheio.Pos;
+            p.IrPara(cheio.Pos, cheio.Andar);
             p.Interagir();
             Assert.Contains(Evento.AbriuRecipiente, p.Eventos);
         }
@@ -93,7 +93,7 @@ namespace TurnoDaNoite.Tests
             var p = Nova();
             foreach (var f in p.Fusiveis)
             {
-                var sala = p.Predio.SalaEm(f.Pos);
+                var sala = p.Predio.SalaEm(f.Pos, f.Andar);
                 Assert.NotEqual(TipoSala.Portaria, sala?.Tipo);
             }
         }
@@ -103,7 +103,30 @@ namespace TurnoDaNoite.Tests
         {
             var p = Nova();
             foreach (var r in p.Recipientes)
-                Assert.NotEqual(TipoSala.Patio, p.Predio.SalaEm(r.Pos)?.Tipo);
+                Assert.NotEqual(TipoSala.Patio, p.Predio.SalaEm(r.Pos, r.Andar)?.Tipo);
+        }
+
+        [Fact]
+        public void TemCoisaNosDoisAndares()
+        {
+            var p = Nova();
+            int embaixo = p.Recipientes.Count(r => r.Andar == 0);
+            int emCima = p.Recipientes.Count(r => r.Andar == 1);
+            Assert.True(embaixo > 0 && emCima > 0,
+                $"recipientes só num andar ({embaixo} embaixo, {emCima} em cima)");
+        }
+
+        [Fact]
+        public void APlantaDoPredioExisteEFicaGuardadaNoTerreo()
+        {
+            var p = Nova();
+            Assert.NotNull(p.MapaItem);
+            Assert.True(p.MapaItem.Dentro >= 0, "a planta ficou largada no chão");
+            Assert.Equal(0, p.MapaItem.Andar);
+            Assert.False(p.Jogador.TemMapa);
+
+            p.Recolher(p.MapaItem.Pos, p.MapaItem.Andar);
+            Assert.True(p.Jogador.TemMapa, "revistei o móvel da planta e não peguei nada");
         }
 
         [Fact]
@@ -118,7 +141,7 @@ namespace TurnoDaNoite.Tests
             for (int passada = 0; passada < 6 && p.Recipientes.Exists(r => !r.Aberto); passada++)
                 foreach (var r in p.Recipientes)
                 {
-                    p.Jogador.Pos = r.Pos;
+                    p.IrPara(r.Pos, r.Andar);
                     p.Interagir();
                 }
             Assert.All(p.Recipientes, r => Assert.True(r.Aberto));
@@ -127,14 +150,14 @@ namespace TurnoDaNoite.Tests
             for (int passada = 0; passada < 6 && p.Fusiveis.Exists(f => !f.Recolhido); passada++)
                 foreach (var f in p.Fusiveis)
                 {
-                    p.Jogador.Pos = f.Pos;
+                    p.IrPara(f.Pos, f.Andar);
                     p.Interagir();
                 }
             Assert.Equal(Regras.FusiveisNecessarios, p.Jogador.FusiveisNaMao);
 
-            p.Jogador.Pos = p.Quadro;
+            p.IrPara(p.Quadro, p.QuadroAndar);
             p.Interagir();
-            p.Jogador.Pos = p.Portao;
+            p.IrPara(p.Portao, 0);
             p.Interagir();
             Assert.Equal(Fase.Escapou, p.Fase);
         }
