@@ -109,6 +109,13 @@ namespace TurnoDaNoite.Core
         /// </summary>
         public bool Cercando;
 
+        /// <summary>
+        /// Espera antes de poder usar a escada de novo. É por criatura, e não
+        /// da partida: com um contador só, a primeira que subisse travava as
+        /// outras no pé da escada.
+        /// </summary>
+        public float TravaEscada;
+
         public P2 Direcao
         {
             get
@@ -129,7 +136,19 @@ namespace TurnoDaNoite.Core
         public Fase Fase { get; private set; } = Fase.Parada;
         public Predio Predio { get; }
         public Jogador Jogador { get; } = new();
-        public Criatura Ela { get; } = new();
+
+        /// <summary>
+        /// Todas elas. O prédio tem mais de uma: com uma só, decorar a rota
+        /// dela resolvia o jogo, e o andar em que ela não estava virava passeio.
+        /// </summary>
+        public List<Criatura> Criaturas { get; } = new();
+
+        /// <summary>
+        /// A primeira. Existe porque metade do código só precisa de UMA — o
+        /// teste que a estaciona longe, o susto que se conta — e escrever
+        /// Criaturas[0] em toda parte esconderia qual delas importa ali.
+        /// </summary>
+        public Criatura Ela => Criaturas[0];
 
         public List<Item> Fusiveis { get; } = new();
         public List<Item> Baterias { get; } = new();
@@ -177,7 +196,6 @@ namespace TurnoDaNoite.Core
         float _tempoPasso, _tempoRespiracao, _tempoBatida;
         /// <summary>Segundos antes de a escada poder ser usada de novo. Sem isto você sobe e desce no mesmo quadro.</summary>
         float _travaEscada;
-        float _travaEscadaDela;
 
         public Partida(int semente = 0)
         {
@@ -379,17 +397,7 @@ namespace TurnoDaNoite.Core
             MontarSolidos();
 
             var camara = Predio.Sala(TipoSala.Camara);
-            Ela.Pos = Predio.ParaMundo(camara.Centro);
-            Ela.Andar = camara.Andar;
-            Ela.Estado = EstadoCriatura.Patrulha;
-            Ela.Caminho.Clear();
-            Ela.PassoDoCaminho = 0;
-            Ela.TempoRecalculo = 0;
-            Ela.UltimaPista = null;
-            Ela.Agressao = 0;
-            Ela.SemPista = 0;
-            Ela.Cercando = false;
-            Ela.Velocidade = default;
+            NascerCriaturas(camara);
         }
 
         /// <summary>
@@ -409,6 +417,59 @@ namespace TurnoDaNoite.Core
                 if (a.Solido) Solidos.Add(new Solido(a.Pos, a.Andar, a.Raio));
 
             Solidos.Add(new Solido(Quadro, QuadroAndar, Regras.RaioQuadro));
+        }
+
+        /// <summary>
+        /// Põe as criaturas no prédio.
+        ///
+        /// A primeira nasce na câmara fria, que é o cômodo mais longe da
+        /// entrada — é a "toca" dela. As outras nascem espalhadas, cada uma
+        /// longe de você E longe das irmãs: duas no mesmo cômodo andam juntas
+        /// o jogo inteiro e valem por uma só, e o que se quer é o prédio
+        /// inteiro ocupado.
+        /// </summary>
+        void NascerCriaturas(Sala toca)
+        {
+            Criaturas.Clear();
+
+            var candidatas = new List<Sala>();
+            foreach (var s in Predio.Salas)
+                if (s.Tipo != TipoSala.Patio && s.Tipo != TipoSala.Portaria) candidatas.Add(s);
+            Embaralhar(candidatas);
+
+            for (int i = 0; i < Regras.QuantidadeDeCriaturas; i++)
+            {
+                var c = new Criatura();
+
+                Sala onde = i == 0 ? toca : null;
+                if (onde == null)
+                    foreach (var s in candidatas)
+                    {
+                        var m = Predio.ParaMundo(s.Centro);
+                        if (P2.Distancia(m, Jogador.Pos) < Regras.DistanciaInicialMinima) continue;
+                        if (PertoDeOutraCriatura(m, s.Andar)) continue;
+                        onde = s;
+                        break;
+                    }
+                if (onde == null) break;      // prédio pequeno demais: fica com as que couberam
+
+                c.Pos = Predio.ParaMundo(onde.Centro);
+                c.Andar = onde.Andar;
+                c.Estado = EstadoCriatura.Patrulha;
+                // grunhidos fora de sincronia, senão as três rugem juntas e
+                // o que era susto vira coro
+                c.TempoGrunhido = (float)_rng.NextDouble() * 9f;
+                Criaturas.Add(c);
+                candidatas.Remove(onde);
+            }
+        }
+
+        bool PertoDeOutraCriatura(P2 p, int andar)
+        {
+            foreach (var c in Criaturas)
+                if (c.Andar == andar && P2.Distancia(c.Pos, p) < Regras.DistanciaEntreCriaturas)
+                    return true;
+            return false;
         }
 
         void Embaralhar<T>(List<T> lista)
@@ -468,10 +529,18 @@ namespace TurnoDaNoite.Core
             if (MapaItem == null) falhas.Add("planta do prédio sem lugar");
 
             if (!DaParaChegar(Quadro, QuadroAndar)) falhas.Add("quadro");
-            if (!Predio.Alcancavel(inicio, Predio.ParaCelula(Ela.Pos, Ela.Andar))) falhas.Add("criatura");
-            if (Ela.Andar == Jogador.Andar &&
-                P2.Distancia(Ela.Pos, Jogador.Pos) < Regras.DistanciaInicialMinima)
-                falhas.Add("criatura perto demais");
+            if (Criaturas.Count < Regras.QuantidadeDeCriaturas)
+                falhas.Add($"só {Criaturas.Count} criaturas couberam");
+
+            for (int i = 0; i < Criaturas.Count; i++)
+            {
+                var c = Criaturas[i];
+                if (!Predio.Alcancavel(inicio, Predio.ParaCelula(c.Pos, c.Andar)))
+                    falhas.Add($"criatura {i + 1} presa");
+                if (c.Andar == Jogador.Andar &&
+                    P2.Distancia(c.Pos, Jogador.Pos) < Regras.DistanciaInicialMinima)
+                    falhas.Add($"criatura {i + 1} perto demais");
+            }
 
             return falhas;
         }
@@ -486,7 +555,6 @@ namespace TurnoDaNoite.Core
             Eventos.Clear();
             Tempo += dt;
             _travaEscada = Math.Max(0, _travaEscada - dt);
-            _travaEscadaDela = Math.Max(0, _travaEscadaDela - dt);
 
             Jogador.Giro = cmd.Giro;
             Jogador.Inclinacao = Math.Clamp(cmd.Inclinacao, -1.4f, 1.4f);
@@ -847,7 +915,9 @@ namespace TurnoDaNoite.Core
                     if (Jogador.FusiveisNaMao <= 0) break;
                     Jogador.FusiveisInstalados += Jogador.FusiveisNaMao;
                     Jogador.FusiveisNaMao = 0;
-                    Ela.Agressao = Jogador.FusiveisInstalados;
+                    // TODAS aceleram: o quadro faz barulho no predio inteiro, e
+                    // a virada de chave e o momento em que o jogo aperta
+                    foreach (var bicho in Criaturas) bicho.Agressao = Jogador.FusiveisInstalados;
                     Eventos.Add(Evento.InstalouFusivel);
                     FazerBarulho(Regras.RuidoQuadro);
                     if (Jogador.FusiveisInstalados >= Regras.FusiveisNecessarios)
@@ -872,24 +942,34 @@ namespace TurnoDaNoite.Core
 
         // ------------------------------------------------------------- criatura
 
+        /// <summary>
+        /// Barulho que o jogador faz. TODAS ouvem — o alerta não é de uma
+        /// criatura, é do prédio. Com uma só ouvindo, correr virava um jogo de
+        /// adivinhar qual delas estava perto, e as outras viravam estátuas.
+        /// </summary>
         void FazerBarulho(float raio)
         {
-            if (Ela.Estado == EstadoCriatura.Caca) return;
+            for (int i = 0; i < Criaturas.Count; i++) Alertar(Criaturas[i], raio);
+        }
+
+        void Alertar(Criatura c, float raio)
+        {
+            if (c.Estado == EstadoCriatura.Caca) return;
 
             // Laje abafa. Do andar de cima ela ainda ouve um barulho grande —
             // é o que impede o piso de cima de virar abrigo seguro — mas só
             // uma fração dele, e nunca o de andar agachado.
-            float alcance = Ela.Andar == Jogador.Andar ? raio : raio * Regras.BarulhoAtravessaLaje;
-            if (P2.Distancia(Ela.Pos, Jogador.Pos) > alcance) return;
+            float alcance = c.Andar == Jogador.Andar ? raio : raio * Regras.BarulhoAtravessaLaje;
+            if (P2.Distancia(c.Pos, Jogador.Pos) > alcance) return;
 
-            Ela.UltimaPista = Jogador.Pos;
-            Ela.AndarDaPista = Jogador.Andar;
-            if (Ela.Estado != EstadoCriatura.Investiga)
+            c.UltimaPista = Jogador.Pos;
+            c.AndarDaPista = Jogador.Andar;
+            if (c.Estado != EstadoCriatura.Investiga)
             {
-                Ela.Estado = EstadoCriatura.Investiga;
-                Ela.TempoRecalculo = 0;
+                c.Estado = EstadoCriatura.Investiga;
+                c.TempoRecalculo = 0;
             }
-            Ela.Paciencia = Regras.PacienciaInvestiga;
+            c.Paciencia = Regras.PacienciaInvestiga;
         }
 
         public float AlcanceDeVisao()
@@ -900,86 +980,134 @@ namespace TurnoDaNoite.Core
             return Jogador.Correndo ? r + Regras.BonusVisaoCorrendo : r;
         }
 
-        public bool ElaTeVe()
+        /// <summary>Alguma delas está te vendo agora?</summary>
+        public bool ElaTeVe() => QuemTeVe() != null;
+
+        /// <summary>Qual delas está te vendo, ou null. Saber QUAL importa para o susto e para o som.</summary>
+        public Criatura QuemTeVe()
+        {
+            for (int i = 0; i < Criaturas.Count; i++)
+                if (TeVe(Criaturas[i])) return Criaturas[i];
+            return null;
+        }
+
+        bool TeVe(Criatura c)
         {
             float alcance = AlcanceDeVisao();
             if (alcance <= 0) return false;
             // o piso é opaco: ninguém enxerga através da laje
-            if (Ela.Andar != Jogador.Andar) return false;
+            if (c.Andar != Jogador.Andar) return false;
 
-            var para = Jogador.Pos - Ela.Pos;
+            var para = Jogador.Pos - c.Pos;
             float d = para.Comprimento;
             if (d > alcance) return false;
 
             // Com a lanterna acesa ela nota a luz de qualquer ângulo; no escuro,
             // só te vê se estiver olhando na sua direção.
             if (d > 2f && !Jogador.LuzAcesa)
-                if (P2.Escalar(para.Normalizado, Ela.Direcao) < Regras.CossenoCampoVisao) return false;
+                if (P2.Escalar(para.Normalizado, c.Direcao) < Regras.CossenoCampoVisao) return false;
 
-            return Predio.Visivel(Ela.Pos, Jogador.Pos, Ela.Andar);
+            return Predio.Visivel(c.Pos, Jogador.Pos, c.Andar);
+        }
+
+        /// <summary>
+        /// A mais perto de você, medindo com o andar. Serve para o medo e para
+        /// o coração: quem aperta o peito é a que está em cima de você, não a
+        /// que está três cômodos adiante.
+        /// </summary>
+        public Criatura MaisPerto()
+        {
+            Criatura melhor = null;
+            float md = float.MaxValue;
+            for (int i = 0; i < Criaturas.Count; i++)
+            {
+                float d = DistanciaReal(Criaturas[i].Pos, Criaturas[i].Andar, Jogador.Pos, Jogador.Andar);
+                if (d >= md) continue;
+                md = d; melhor = Criaturas[i];
+            }
+            return melhor;
         }
 
         void PassoCriatura(float dt)
         {
-            float distJ = DistanciaReal(Ela.Pos, Ela.Andar, Jogador.Pos, Jogador.Andar);
-            bool enxerga = ElaTeVe();
+            for (int i = 0; i < Criaturas.Count; i++)
+            {
+                PassoDeUma(Criaturas[i], dt);
+                if (Fase != Fase.Jogando) return;   // uma pegou: as outras não importam mais
+            }
+        }
+
+        void PassoDeUma(Criatura c, float dt)
+        {
+            c.TravaEscada = Math.Max(0, c.TravaEscada - dt);
+
+            float distJ = DistanciaReal(c.Pos, c.Andar, Jogador.Pos, Jogador.Andar);
+            bool enxerga = TeVe(c);
 
             if (enxerga)
             {
-                if (Ela.Estado != EstadoCriatura.Caca)
+                if (c.Estado != EstadoCriatura.Caca)
                 {
-                    Ela.Estado = EstadoCriatura.Caca;
-                    Ela.TempoRecalculo = 0;
+                    c.Estado = EstadoCriatura.Caca;
+                    c.TempoRecalculo = 0;
                     Eventos.Add(Evento.ElaViuVoce);
-                    UltimoSomDela = Ela.Pos;
+                    UltimoSomDela = c.Pos;
+
+                    // Uma que te vê CHAMA AS OUTRAS. É o que transforma três
+                    // bichos soltos num cerco: você é visto num corredor e o
+                    // prédio inteiro converge. Elas não ganham sua posição de
+                    // graça — ganham a pista, como se tivessem ouvido o grito.
+                    for (int i = 0; i < Criaturas.Count; i++)
+                        if (!ReferenceEquals(Criaturas[i], c))
+                            Alertar(Criaturas[i], Regras.AlcanceDoChamado);
                 }
-                Ela.UltimaPista = Jogador.Pos;
-                Ela.AndarDaPista = Jogador.Andar;
-                Ela.Paciencia = Regras.PacienciaCaca;
+                c.UltimaPista = Jogador.Pos;
+                c.AndarDaPista = Jogador.Andar;
+                c.Paciencia = Regras.PacienciaCaca;
             }
-            else if (Ela.Estado == EstadoCriatura.Caca)
+            else if (c.Estado == EstadoCriatura.Caca)
             {
-                Ela.Paciencia -= dt;
-                if (Ela.Paciencia <= 0)
+                c.Paciencia -= dt;
+                if (c.Paciencia <= 0)
                 {
-                    Ela.Estado = EstadoCriatura.Procura;
-                    Ela.Paciencia = Regras.PacienciaProcura;
-                    Ela.TempoRecalculo = 0;
+                    c.Estado = EstadoCriatura.Procura;
+                    c.Paciencia = Regras.PacienciaProcura;
+                    c.TempoRecalculo = 0;
                 }
             }
-            else if (Ela.Estado is EstadoCriatura.Investiga or EstadoCriatura.Procura)
+            else if (c.Estado is EstadoCriatura.Investiga or EstadoCriatura.Procura)
             {
-                Ela.Paciencia -= dt;
-                if (Ela.Paciencia <= 0) { Ela.Estado = EstadoCriatura.Patrulha; Ela.TempoRecalculo = 0; }
+                c.Paciencia -= dt;
+                if (c.Paciencia <= 0) { c.Estado = EstadoCriatura.Patrulha; c.TempoRecalculo = 0; }
             }
 
             // Escondido e respirando com ela ao lado: ela te acha.
-            if (Jogador.Escondido && distJ < 3.2f && Ela.Estado != EstadoCriatura.Patrulha && !Jogador.PrendendoAr)
+            if (Jogador.Escondido && distJ < 3.2f && c.Estado != EstadoCriatura.Patrulha && !Jogador.PrendendoAr)
             {
-                Ela.UltimaPista = Jogador.Pos;
-                Ela.AndarDaPista = Jogador.Andar;
-                Ela.Paciencia = Math.Max(Ela.Paciencia, 7f);
+                c.UltimaPista = Jogador.Pos;
+                c.AndarDaPista = Jogador.Andar;
+                c.Paciencia = Math.Max(c.Paciencia, 7f);
             }
 
-            Ela.SemPista = Ela.Estado == EstadoCriatura.Patrulha ? Ela.SemPista + dt : 0f;
+            c.SemPista = c.Estado == EstadoCriatura.Patrulha ? c.SemPista + dt : 0f;
 
             // O cerco acaba de dois jeitos: uma pista de verdade, que vale mais
             // que o palpite, ou ela chegando onde achava que você estava. Se
             // chegou e você não estava lá, volta a patrulhar do zero.
-            if (Ela.Cercando &&
-                (Ela.Estado != EstadoCriatura.Patrulha || distJ < Regras.RaioCerco))
+            if (c.Cercando &&
+                (c.Estado != EstadoCriatura.Patrulha || distJ < Regras.RaioCerco))
             {
-                Ela.Cercando = false;
-                Ela.SemPista = 0f;
+                c.Cercando = false;
+                c.SemPista = 0f;
             }
 
-            EscolherDestino(dt);
-            Mover(dt, distJ);
-            Sons(dt, distJ);
+            EscolherDestino(c, dt);
+            Mover(c, dt, distJ);
+            Sons(c, dt, distJ);
 
             if (distJ < Regras.DistanciaParaPegar && !Jogador.Escondido) Pegar();
             if (Jogador.Escondido && distJ < Regras.DistanciaArmario
-                && Ela.Estado != EstadoCriatura.Patrulha && !Jogador.PrendendoAr) Pegar();
+                && c.Estado != EstadoCriatura.Patrulha && !Jogador.PrendendoAr) Pegar();
         }
 
         /// <summary>
@@ -995,31 +1123,31 @@ namespace TurnoDaNoite.Core
             return Predio.EhParede(perto) ? c : perto;
         }
 
-        void EscolherDestino(float dt)
+        void EscolherDestino(Criatura c, float dt)
         {
-            Ela.TempoRecalculo -= dt;
-            bool semCaminho = Ela.Caminho.Count == 0 || Ela.PassoDoCaminho >= Ela.Caminho.Count;
+            c.TempoRecalculo -= dt;
+            bool semCaminho = c.Caminho.Count == 0 || c.PassoDoCaminho >= c.Caminho.Count;
 
             // Caçando o alvo se move, então recalcula sempre. Patrulhando ela precisa
             // CHEGAR onde decidiu ir: recalcular a toda hora fazia ela trocar de ideia
             // antes de sair do lugar e nunca cruzar o prédio.
-            bool recalcular = Ela.Estado == EstadoCriatura.Caca
-                ? Ela.TempoRecalculo <= 0
-                : (semCaminho || Ela.TempoRecalculo <= 0);
+            bool recalcular = c.Estado == EstadoCriatura.Caca
+                ? c.TempoRecalculo <= 0
+                : (semCaminho || c.TempoRecalculo <= 0);
             if (!recalcular) return;
 
-            Ela.TempoRecalculo = Ela.Estado == EstadoCriatura.Caca ? 0.45f : 8f;
+            c.TempoRecalculo = c.Estado == EstadoCriatura.Caca ? 0.45f : 8f;
             Celula destino;
 
-            if (Ela.Estado == EstadoCriatura.Caca)
+            if (c.Estado == EstadoCriatura.Caca)
                 destino = Predio.ParaCelula(Jogador.Pos, Jogador.Andar);
-            else if (Ela.UltimaPista.HasValue &&
-                     Ela.Estado is EstadoCriatura.Investiga or EstadoCriatura.Procura)
+            else if (c.UltimaPista.HasValue &&
+                     c.Estado is EstadoCriatura.Investiga or EstadoCriatura.Procura)
             {
-                destino = Predio.ParaCelula(Ela.UltimaPista.Value, Ela.AndarDaPista);
-                if (Ela.Estado == EstadoCriatura.Procura) destino = Sacudir(destino, 3);
+                destino = Predio.ParaCelula(c.UltimaPista.Value, c.AndarDaPista);
+                if (c.Estado == EstadoCriatura.Procura) destino = Sacudir(destino, 3);
             }
-            else if (Ela.Cercando || Ela.SemPista > Regras.SegundosSemPistaAteApertar)
+            else if (c.Cercando || c.SemPista > Regras.SegundosSemPistaAteApertar)
             {
                 // Faz tempo demais sem pista: ela começa a fechar o cerco. Não é mira
                 // perfeita — é pressão, para o jogo não virar passeio. E uma vez
@@ -1028,7 +1156,7 @@ namespace TurnoDaNoite.Core
                 //
                 // O cerco atravessa andar: subir a escada não pode ser um botão
                 // de "fim de perseguição", senão o piso de cima vira abrigo.
-                Ela.Cercando = true;
+                c.Cercando = true;
                 var alvo = Predio.ParaCelula(Jogador.Pos, Jogador.Andar);
                 destino = Sacudir(alvo, 4);
             }
@@ -1041,94 +1169,100 @@ namespace TurnoDaNoite.Core
                 destino = Predio.PontoLivre(sala, _rng);
             }
 
-            Ela.Caminho = Predio.Caminho(Predio.ParaCelula(Ela.Pos, Ela.Andar), destino)
-                          ?? new List<Celula>();
-            Ela.PassoDoCaminho = 0;
+            c.Caminho = Predio.Caminho(Predio.ParaCelula(c.Pos, c.Andar), destino)
+                        ?? new List<Celula>();
+            c.PassoDoCaminho = 0;
         }
 
-        void Mover(float dt, float distJ)
+        void Mover(Criatura c, float dt, float distJ)
         {
-            float vel = Ela.Estado switch
+            float vel = c.Estado switch
             {
                 EstadoCriatura.Caca => Regras.VelCaca,
                 EstadoCriatura.Investiga => Regras.VelInvestiga,
                 EstadoCriatura.Procura => Regras.VelProcura,
                 _ => Regras.VelPatrulha
-            } + Ela.Agressao * Regras.AceleracaoPorFusivel;
+            } + c.Agressao * Regras.AceleracaoPorFusivel;
 
             P2? alvo = null;
-            if (Ela.Caminho.Count > 0)
+            if (c.Caminho.Count > 0)
             {
-                var no = Ela.Caminho[Math.Min(Ela.PassoDoCaminho, Ela.Caminho.Count - 1)];
+                var no = c.Caminho[Math.Min(c.PassoDoCaminho, c.Caminho.Count - 1)];
 
                 // O caminho pode trocar de andar: quando o próximo nó está no
                 // outro piso, é uma escada, e ela sobe. Sem isto ela ficava
                 // andando em círculos no pé da escada, porque a busca em largura
                 // já atravessava andares e o corpo dela não.
-                if (no.Andar != Ela.Andar && _travaEscadaDela <= 0)
+                if (no.Andar != c.Andar && c.TravaEscada <= 0)
                 {
-                    Ela.Andar = no.Andar;
-                    _travaEscadaDela = Regras.EsperaDaEscada;
-                    Ela.Pos = Predio.ParaMundo(no);
+                    c.Andar = no.Andar;
+                    c.TravaEscada = Regras.EsperaDaEscada;
+                    c.Pos = Predio.ParaMundo(no);
                 }
 
                 var m = Predio.ParaMundo(no);
                 alvo = m;
-                if (no.Andar == Ela.Andar && P2.Distancia(m, Ela.Pos) < Predio.Celula * 0.55f)
-                    Ela.PassoDoCaminho++;
-                if (Ela.PassoDoCaminho >= Ela.Caminho.Count) { Ela.Caminho.Clear(); Ela.TempoRecalculo = 0; }
+                if (no.Andar == c.Andar && P2.Distancia(m, c.Pos) < Predio.Celula * 0.55f)
+                    c.PassoDoCaminho++;
+                if (c.PassoDoCaminho >= c.Caminho.Count) { c.Caminho.Clear(); c.TempoRecalculo = 0; }
             }
 
             // Perto e com linha de visão ela larga a grade e vem reto em cima.
-            if (Ela.Estado == EstadoCriatura.Caca && distJ < Regras.DistanciaInvestida
-                && Ela.Andar == Jogador.Andar
-                && Predio.Visivel(Ela.Pos, Jogador.Pos, Ela.Andar))
+            if (c.Estado == EstadoCriatura.Caca && distJ < Regras.DistanciaInvestida
+                && c.Andar == Jogador.Andar
+                && Predio.Visivel(c.Pos, Jogador.Pos, c.Andar))
                 alvo = Jogador.Pos;
 
             float suavizar = Math.Min(1f, dt * 5f);
             if (alvo.HasValue)
             {
-                var dir = (alvo.Value - Ela.Pos).Normalizado;
-                Ela.Velocidade = new P2(
-                    Ela.Velocidade.X + (dir.X * vel - Ela.Velocidade.X) * suavizar,
-                    Ela.Velocidade.Z + (dir.Z * vel - Ela.Velocidade.Z) * suavizar);
+                var dir = (alvo.Value - c.Pos).Normalizado;
+                c.Velocidade = new P2(
+                    c.Velocidade.X + (dir.X * vel - c.Velocidade.X) * suavizar,
+                    c.Velocidade.Z + (dir.Z * vel - c.Velocidade.Z) * suavizar);
             }
             else
             {
                 float frear = Math.Min(1f, dt * 4f);
-                Ela.Velocidade = new P2(Ela.Velocidade.X * (1 - frear), Ela.Velocidade.Z * (1 - frear));
+                c.Velocidade = new P2(c.Velocidade.X * (1 - frear), c.Velocidade.Z * (1 - frear));
             }
 
-            Ela.Pos += Ela.Velocidade * dt;
-            Ela.Pos = Predio.EmpurrarFora(Ela.Pos, 0.5f, Ela.Andar);
+            c.Pos += c.Velocidade * dt;
+            c.Pos = Predio.EmpurrarFora(c.Pos, 0.5f, c.Andar);
             // Ela também esbarra nos móveis, com raio menor: atravessar um
             // armário na frente do jogador acabaria com o susto. Raio menor
             // porque o caminho dela ignora mobília, e ela precisa conseguir
             // espremer em vez de ficar presa num corredor mobiliado.
-            Ela.Pos = Colisao.Empurrar(Ela.Pos, Regras.RaioCriaturaEmMoveis, Solidos, Ela.Andar);
-            Ela.Pos = Predio.EmpurrarFora(Ela.Pos, 0.5f, Ela.Andar);
+            c.Pos = Colisao.Empurrar(c.Pos, Regras.RaioCriaturaEmMoveis, Solidos, c.Andar);
+            c.Pos = Predio.EmpurrarFora(c.Pos, 0.5f, c.Andar);
         }
 
-        void Sons(float dt, float distJ)
+        void Sons(Criatura c, float dt, float distJ)
         {
-            float andando = Ela.Velocidade.Comprimento;
+            float andando = c.Velocidade.Comprimento;
             if (andando > 0.3f)
             {
-                Ela.TempoPasso -= dt * andando;
-                if (Ela.TempoPasso <= 0)
+                c.TempoPasso -= dt * andando;
+                if (c.TempoPasso <= 0)
                 {
-                    Ela.TempoPasso = Ela.Estado == EstadoCriatura.Caca ? 1.5f : 2.2f;
-                    Eventos.Add(Evento.PassoDela);
-                    UltimoSomDela = Ela.Pos;
+                    c.TempoPasso = c.Estado == EstadoCriatura.Caca ? 1.5f : 2.2f;
+                    // só toca o passo de quem está perto o bastante para ser
+                    // ouvida: três bichos andando pelo prédio inteiro somariam
+                    // um chiado constante, e voltaríamos ao "som chato"
+                    if (distJ < Regras.AlcanceDoSomDela)
+                    {
+                        Eventos.Add(Evento.PassoDela);
+                        UltimoSomDela = c.Pos;
+                    }
                 }
             }
 
-            Ela.TempoGrunhido -= dt;
-            if (Ela.TempoGrunhido <= 0 && distJ < 26f)
+            c.TempoGrunhido -= dt;
+            if (c.TempoGrunhido <= 0 && distJ < 26f)
             {
-                Ela.TempoGrunhido = 6f + (float)_rng.NextDouble() * 8f;
-                Eventos.Add(Ela.Estado == EstadoCriatura.Caca ? Evento.ElaRugiu : Evento.ElaArranhou);
-                UltimoSomDela = Ela.Pos;
+                c.TempoGrunhido = 6f + (float)_rng.NextDouble() * 8f;
+                Eventos.Add(c.Estado == EstadoCriatura.Caca ? Evento.ElaRugiu : Evento.ElaArranhou);
+                UltimoSomDela = c.Pos;
             }
         }
 
@@ -1141,19 +1275,21 @@ namespace TurnoDaNoite.Core
 
         void PassoMedo(float dt)
         {
-            // Só dá medo o que está no seu andar. Enquanto a distância ignorava
-            // o piso, ela passava embaixo de você e o coração disparava sem
-            // motivo nenhum visível.
-            float d = DistanciaReal(Ela.Pos, Ela.Andar, Jogador.Pos, Jogador.Andar);
+            // O medo é da MAIS PERTO. Somar o de todas faria você andar apavorado
+            // o tempo todo só porque o prédio tem três bichos, e medo constante
+            // deixa de ser medo.
+            var c = MaisPerto();
+            float d = c == null ? 1e6f
+                : DistanciaReal(c.Pos, c.Andar, Jogador.Pos, Jogador.Andar);
 
             // Antes a escala era 26 m: a 14 m de distância o medo já passava do
             // limiar do coração, e num prédio onde ela circula isso era quase
             // sempre. O resultado era um baque contínuo no ouvido que não
             // avisava de nada — o jogador só ouvia barulho chato.
             float alvo = Math.Clamp(1 - d / Regras.DistanciaQueDaMedo, 0, 1);
-            if (Ela.Estado == EstadoCriatura.Caca && Ela.Andar == Jogador.Andar)
+            if (c != null && c.Estado == EstadoCriatura.Caca && c.Andar == Jogador.Andar)
                 alvo = Math.Max(alvo, 0.7f);
-            if (d < 14f && Predio.Visivel(Ela.Pos, Jogador.Pos, Jogador.Andar))
+            if (c != null && d < 14f && Predio.Visivel(c.Pos, Jogador.Pos, Jogador.Andar))
                 alvo = Math.Min(1, alvo + 0.25f);
             if (Jogador.Escondido) alvo *= 0.85f;
 

@@ -36,11 +36,32 @@ namespace TurnoDaNoite.Tests
             p.Interagir();      // pega o que estava dentro
         }
 
-        /// <summary>Teleporta a criatura, andar incluído. Esquecer o andar deixa ela num piso e o teste no outro.</summary>
+        /// <summary>Teleporta a primeira criatura, andar incluído. Esquecer o andar deixa ela num piso e o teste no outro.</summary>
         public static void PorElaEm(this Partida p, P2 onde, int andar = 0)
         {
             p.Ela.Pos = onde;
             p.Ela.Andar = andar;
+        }
+
+        /// <summary>
+        /// Estaciona TODAS longe. Desde que o prédio passou a ter três
+        /// criaturas, estacionar só a primeira não isola teste nenhum: as
+        /// outras duas continuam rondando e pegam o jogador no meio de um
+        /// teste que era sobre bateria.
+        /// </summary>
+        public static void EstacionarTodasLonge(this Partida p)
+        {
+            var longe = LongeDoJogador(p);
+            for (int i = 0; i < p.Criaturas.Count; i++)
+            {
+                // espalhadas em linha, para não empilharem e se empurrarem
+                p.Criaturas[i].Pos = new P2(longe.X + i * 2.5f, longe.Z);
+                p.Criaturas[i].Andar = p.Jogador.Andar;
+                p.Criaturas[i].Estado = EstadoCriatura.Patrulha;
+                p.Criaturas[i].Caminho.Clear();
+                p.Criaturas[i].Cercando = false;
+                p.Criaturas[i].SemPista = 0;
+            }
         }
 
         /// <summary>Teleporta o jogador, andar incluído.</summary>
@@ -340,7 +361,7 @@ namespace TurnoDaNoite.Tests
 
             void Correr(int segundos)
             {
-                for (int s = 0; s < segundos; s++) { p.PorElaEm(longe, p.Jogador.Andar); p.Rodar(1f); }
+                for (int s = 0; s < segundos; s++) { p.EstacionarTodasLonge(); p.Rodar(1f); }
             }
 
             // Dois minutos ainda tem luz: a lanterna durava 95 s e isso parecia
@@ -364,7 +385,7 @@ namespace TurnoDaNoite.Tests
             int segundos = 0;
             while (p.Jogador.Lanterna && segundos < 600)
             {
-                p.PorElaEm(longe, p.Jogador.Andar);
+                p.EstacionarTodasLonge();
                 p.Rodar(1f);
                 segundos++;
             }

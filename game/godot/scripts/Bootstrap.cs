@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 using TurnoDaNoite.Core;
 
@@ -526,6 +527,115 @@ namespace TurnoDaNoite.Jogo
             }
 
             MontarEscadas(raiz);
+            MontarFachada(raiz);
+        }
+
+        /// <summary>
+        /// O lado de fora: chão de concreto, degraus, marquise e a luz sobre a
+        /// porta.
+        ///
+        /// Existe porque "entrar no prédio" não significava nada. O pátio
+        /// recebia o mesmo carpete, a mesma madeira e o mesmo forro dos
+        /// cômodos, então atravessar a porta era mudar de sala. Um limiar só
+        /// existe quando os dois lados são diferentes: fora é concreto sob o
+        /// céu, dentro é carpete sob o forro.
+        /// </summary>
+        void MontarFachada(Node3D raiz)
+        {
+            var predio = _partida.Predio;
+            var patio = predio.Sala(TipoSala.Patio);
+            if (patio == null) return;
+
+            var fora = new Node3D { Name = "Fachada" };
+            raiz.AddChild(fora);
+
+            var concreto = Texturizado("teto", new Color(0.30f, 0.30f, 0.29f), 0.22f)
+                           ?? new StandardMaterial3D
+                           { AlbedoColor = new Color(0.17f, 0.17f, 0.16f), Roughness = 0.95f };
+            var chapa = Texturizado("metal", new Color(0.22f, 0.23f, 0.24f), 0.9f)
+                        ?? new StandardMaterial3D
+                        { AlbedoColor = new Color(0.16f, 0.17f, 0.18f), Roughness = 0.7f };
+
+            // ---- o chão do pátio, por cima do carpete do térreo
+            float largura = (patio.Larg + 4) * Predio.Celula;
+            float fundo = (patio.Alt + 3) * Predio.Celula;
+            var centro = predio.ParaMundo(patio.Centro);
+
+            var piso = new MeshInstance3D
+            {
+                Mesh = new BoxMesh { Size = new Vector3(largura, 0.12f, fundo) },
+                MaterialOverride = concreto,
+                Position = new Vector3(centro.X, 0.05f, centro.Z + Predio.Celula),
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
+            };
+            fora.AddChild(piso);
+
+            // ---- os degraus até a porta: o corpo sente que subiu
+            var porta = _partida.Portao;
+            for (int i = 0; i < 2; i++)
+            {
+                float z = porta.Z + Predio.Celula * 0.55f + i * 0.34f;
+                fora.AddChild(new MeshInstance3D
+                {
+                    Mesh = new BoxMesh { Size = new Vector3(Predio.Celula * 2.2f, 0.11f, 0.34f) },
+                    MaterialOverride = concreto,
+                    Position = new Vector3(porta.X, 0.055f + (1 - i) * 0.11f, z),
+                    CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
+                });
+            }
+
+            // ---- a marquise sobre a entrada, com dois montantes
+            fora.AddChild(new MeshInstance3D
+            {
+                Mesh = new BoxMesh { Size = new Vector3(Predio.Celula * 2.6f, 0.16f, 1.9f) },
+                MaterialOverride = chapa,
+                Position = new Vector3(porta.X, 3.05f, porta.Z + 0.95f)
+            });
+            foreach (float lado in new[] { -1f, 1f })
+                fora.AddChild(new MeshInstance3D
+                {
+                    Mesh = new BoxMesh { Size = new Vector3(0.12f, 3.0f, 0.12f) },
+                    MaterialOverride = chapa,
+                    Position = new Vector3(porta.X + lado * Predio.Celula * 1.2f, 1.5f, porta.Z + 1.75f)
+                });
+
+            // ---- a luz sobre a porta: é o farol que diz "a entrada é aqui"
+            var luminaria = new MeshInstance3D
+            {
+                Mesh = new BoxMesh { Size = new Vector3(0.5f, 0.14f, 0.22f) },
+                MaterialOverride = new StandardMaterial3D
+                {
+                    AlbedoColor = new Color(1f, 0.86f, 0.62f),
+                    EmissionEnabled = true,
+                    Emission = new Color(1f, 0.84f, 0.58f),
+                    EmissionEnergyMultiplier = 2.4f
+                },
+                Position = new Vector3(porta.X, 2.82f, porta.Z + 0.42f),
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
+            };
+            fora.AddChild(luminaria);
+
+            fora.AddChild(new OmniLight3D
+            {
+                LightCullMask = CamadaDoMundo,
+                LightColor = new Color(1f, 0.80f, 0.54f),
+                LightEnergy = 4.2f,
+                OmniRange = 13f,
+                ShadowEnabled = true,
+                Position = new Vector3(porta.X, 2.72f, porta.Z + 0.55f)
+            });
+
+            // ---- a placa ao lado da porta
+            fora.AddChild(new MeshInstance3D
+            {
+                Mesh = new BoxMesh { Size = new Vector3(1.15f, 0.42f, 0.05f) },
+                MaterialOverride = new StandardMaterial3D
+                {
+                    AlbedoColor = new Color(0.14f, 0.16f, 0.15f), Roughness = 0.6f
+                },
+                Position = new Vector3(porta.X + Predio.Celula * 1.05f, 1.9f, porta.Z + 0.36f),
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
+            });
         }
 
         void MontarUmAndar(Node3D raiz, int andar, float lado)
@@ -630,6 +740,12 @@ namespace TurnoDaNoite.Jogo
                     foreach (var (dx, dz) in new[] { (1, 0), (-1, 0), (0, 1), (0, -1) })
                     {
                         if (predio.EhParede(cx + dx, cz + dz, andar)) continue;
+
+                        // A face que dá para o pátio é FACHADA, não parede de
+                        // cômodo: madeira e rodapé do lado de fora acabariam
+                        // com a diferença entre entrar e não entrar.
+                        var vizinha = predio.ParaMundo(new Celula(cx + dx, cz + dz, andar));
+                        if (predio.SalaEm(vizinha, andar)?.Tipo == TipoSala.Patio) continue;
 
                         var m = predio.ParaMundo(new Celula(cx, cz, andar));
                         bool noEixoX = dx != 0;
@@ -900,14 +1016,39 @@ namespace TurnoDaNoite.Jogo
 
             // pela altura, nao pela caixa: a envergadura dela esmagava a escala
             // e o bicho de 2,35 m aparecia com setenta centimetros
-            _criatura = Props.CriarComAltura(Peca.Criatura, Regras.AlturaDaCriatura, _matCriatura);
-            GuardarMembros();
-            AddChild(_criatura);
-            _animCriatura = AcharAnimador(_criatura);
+            // Uma cena por criatura. Eram uma só quando o jogo tinha uma só;
+            // com três, desenhar uma e teleportá-la faria duas delas serem
+            // invisíveis — e criatura invisível que te pega é bug, não susto.
+            foreach (var bicho in _partida.Criaturas)
+            {
+                var no = Props.CriarComAltura(Peca.Criatura, Regras.AlturaDaCriatura, _matCriatura);
+                AddChild(no);
+                _criaturas.Add(new NoCriatura
+                {
+                    Raiz = no,
+                    CoxaE = AcharPorNome(no, "CoxaE"),
+                    CoxaD = AcharPorNome(no, "CoxaD"),
+                    BracoE = AcharPorNome(no, "BracoE"),
+                    BracoD = AcharPorNome(no, "BracoD"),
+                    Tronco = AcharPorNome(no, "Tronco"),
+                    Cabeca = AcharPorNome(no, "Cabeca"),
+                    // fase de caminhada diferente em cada uma: três andando no
+                    // mesmo compasso parecem um desfile
+                    Passo = (float)GD.RandRange(0, 6.28)
+                });
+            }
+
+            _criatura = _criaturas.Count > 0 ? _criaturas[0].Raiz : null;
+            _animCriatura = _criatura != null ? AcharAnimador(_criatura) : null;
         }
 
-        Node3D _coxaE, _coxaD, _bracoE, _bracoD, _troncoDela, _cabecaDela;
-        float _passoDela;
+        /// <summary>Uma criatura na cena, com os membros guardados para animar na mão.</summary>
+        sealed class NoCriatura
+        {
+            public Node3D Raiz, CoxaE, CoxaD, BracoE, BracoD, Tronco, Cabeca;
+            public float Passo;
+        }
+        readonly List<NoCriatura> _criaturas = new();
 
         /// <summary>
         /// Guarda os membros para animar na mão. O modelo montado em código não
@@ -915,15 +1056,7 @@ namespace TurnoDaNoite.Jogo
         /// Quando um modelo com rig aparecer em assets/modelos, estes ficam
         /// nulos e o AnimationPlayer dele assume.
         /// </summary>
-        void GuardarMembros()
-        {
-            _coxaE = AcharPorNome(_criatura, "CoxaE");
-            _coxaD = AcharPorNome(_criatura, "CoxaD");
-            _bracoE = AcharPorNome(_criatura, "BracoE");
-            _bracoD = AcharPorNome(_criatura, "BracoD");
-            _troncoDela = AcharPorNome(_criatura, "Tronco");
-            _cabecaDela = AcharPorNome(_criatura, "Cabeca");
-        }
+        void GuardarMembros() { }   // os membros agora vêm por criatura, em NoCriatura
 
         /// <summary>
         /// A caminhada dela: pernas e braços em oposição, com o tronco
@@ -931,27 +1064,27 @@ namespace TurnoDaNoite.Jogo
         /// parecer vivo é o passo bater com o quanto ele anda, e o ritmo vem
         /// da velocidade de verdade, não de um relógio solto.
         /// </summary>
-        void AnimarCriaturaNaMao(float dt)
+        void AnimarNaMao(NoCriatura no, Criatura c, float dt)
         {
-            if (_coxaE == null) return;
+            if (no.CoxaE == null) return;
 
-            float vel = _partida.Ela.Velocidade.Comprimento;
-            _passoDela += dt * (0.9f + vel * 1.15f);
+            float vel = c.Velocidade.Comprimento;
+            no.Passo += dt * (0.9f + vel * 1.15f);
 
-            float balanco = Mathf.Sin(_passoDela) * Mathf.Min(0.85f, 0.14f + vel * 0.13f);
+            float balanco = Mathf.Sin(no.Passo) * Mathf.Min(0.85f, 0.14f + vel * 0.13f);
             float contra = -balanco;
 
-            _coxaE.Rotation = new Vector3(balanco, 0, 0);
-            _coxaD.Rotation = new Vector3(contra, 0, 0);
+            no.CoxaE.Rotation = new Vector3(balanco, 0, 0);
+            no.CoxaD.Rotation = new Vector3(contra, 0, 0);
             // braços na contramão das pernas, e mais soltos
-            _bracoE.Rotation = new Vector3(contra * 1.25f, 0, 0.10f);
-            _bracoD.Rotation = new Vector3(balanco * 1.25f, 0, -0.10f);
+            no.BracoE.Rotation = new Vector3(contra * 1.25f, 0, 0.10f);
+            no.BracoD.Rotation = new Vector3(balanco * 1.25f, 0, -0.10f);
 
-            if (_troncoDela != null)
-                _troncoDela.Rotation = new Vector3(0.18f + Mathf.Abs(balanco) * 0.10f,
-                                                   Mathf.Sin(_passoDela) * 0.05f, 0);
-            if (_cabecaDela != null)
-                _cabecaDela.Rotation = new Vector3(0, Mathf.Sin(_passoDela * 0.5f) * 0.12f, 0);
+            if (no.Tronco != null)
+                no.Tronco.Rotation = new Vector3(0.18f + Mathf.Abs(balanco) * 0.10f,
+                                                 Mathf.Sin(no.Passo) * 0.05f, 0);
+            if (no.Cabeca != null)
+                no.Cabeca.Rotation = new Vector3(0, Mathf.Sin(no.Passo * 0.5f) * 0.12f, 0);
         }
 
         static Peca PecaDo(TipoRecipiente t) => t switch
@@ -1576,27 +1709,37 @@ namespace TurnoDaNoite.Jogo
 
         void SincronizarCriatura(float dt)
         {
-            var ela = _partida.Ela;
-            _criatura.Position = new Vector3(ela.Pos.X, Predio.AlturaDoAndar(ela.Andar), ela.Pos.Z);
+            int quantas = Mathf.Min(_criaturas.Count, _partida.Criaturas.Count);
+            for (int i = 0; i < quantas; i++)
+                SincronizarUma(_criaturas[i], _partida.Criaturas[i], dt);
 
-            var dir = ela.Direcao;
-            _criatura.Rotation = new Vector3(0, Mathf.Atan2(dir.X, dir.Z) + GiroDoModelo, 0);
+            // a animação importada, quando houver, segue a primeira
+            if (_animCriatura != null && _partida.Criaturas.Count > 0)
+            {
+                var ela = _partida.Ela;
+                float ritmo = ela.Velocidade.Comprimento;
+                Animar(ela.Estado == EstadoCriatura.Caca || ritmo > 4f ? "Run"
+                     : ritmo > 0.4f ? "Walk"
+                     : "Idle");
+            }
+        }
+
+        void SincronizarUma(NoCriatura no, Criatura c, float dt)
+        {
+            no.Raiz.Position = new Vector3(c.Pos.X, Predio.AlturaDoAndar(c.Andar), c.Pos.Z);
+
+            var dir = c.Direcao;
+            no.Raiz.Rotation = new Vector3(0, Mathf.Atan2(dir.X, dir.Z) + GiroDoModelo, 0);
 
             // As DUAS condições, numa linha só. Estavam em duas atribuições
             // separadas e a segunda apagava a primeira: a criatura voltava a
             // ser desenhada através da laje sempre que passasse a menos de
             // quarenta e cinco metros, um andar abaixo de você.
-            _criatura.Visible = ela.Andar == _partida.Jogador.Andar
-                             && P2.Distancia(ela.Pos, _partida.Jogador.Pos) < 45f;
-
-            // a animacao segue o estado: parada, andando ou correndo atras de voce
-            float ritmo = ela.Velocidade.Comprimento;
-            Animar(ela.Estado == EstadoCriatura.Caca || ritmo > 4f ? "Run"
-                 : ritmo > 0.4f ? "Walk"
-                 : "Idle");
+            no.Raiz.Visible = c.Andar == _partida.Jogador.Andar
+                           && P2.Distancia(c.Pos, _partida.Jogador.Pos) < 45f;
 
             // sem esqueleto importado, a caminhada é feita aqui na mão
-            AnimarCriaturaNaMao(dt);
+            AnimarNaMao(no, c, dt);
         }
 
         void TirarFoto(string caminho)
@@ -1642,14 +1785,20 @@ namespace TurnoDaNoite.Jogo
                    _partida.MapaItem != null && _partida.MapaItem.Dentro >= 0);
             Checar("câmera criada", _camera != null);
             Checar("lanterna criada", _lanterna != null);
-            Checar("criatura na cena", _criatura != null);
+            Checar($"criaturas na cena ({_criaturas.Count})",
+                   _criaturas.Count == _partida.Criaturas.Count
+                   && _criaturas.Count == Regras.QuantidadeDeCriaturas);
+            Checar("cada criatura tem o proprio no",
+                   _criaturas.TrueForAll(n => n.Raiz != null)
+                   && _criaturas.Select(n => n.Raiz).Distinct().Count() == _criaturas.Count);
             // A criatura anda de dois jeitos: pelo AnimationPlayer de um modelo
             // importado, ou pelos membros que o modelo em código expõe. O que
             // não pode é nenhum dos dois — aí ela desliza pelo chão sem mexer
             // uma perna, que é o que ela fazia antes.
             bool comRig = _animCriatura != null
                           && _animCriatura.HasAnimation("Walk") && _animCriatura.HasAnimation("Run");
-            bool comMembros = _coxaE != null && _coxaD != null && _bracoE != null && _bracoD != null;
+            bool comMembros = _criaturas.Count > 0 && _criaturas.TrueForAll(
+                n => n.CoxaE != null && n.CoxaD != null && n.BracoE != null && n.BracoD != null);
 
             Checar(comRig ? "animação: esqueleto do modelo (" +
                             string.Join(", ", _animCriatura.GetAnimationList()) + ")"

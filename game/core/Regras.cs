@@ -164,5 +164,20 @@ namespace TurnoDaNoite.Core
         public const float RaioInteracao = 2.4f;
         /// <summary>Distância mínima entre onde a criatura nasce e onde você nasce.</summary>
         public const float DistanciaInicialMinima = 28f;
+
+        // ---------------- quantas sao ----------------
+        /// <summary>
+        /// Quantas criaturas rondam o predio. Com uma so, decorar a rota dela
+        /// resolvia o jogo e o andar em que ela nao estava virava passeio.
+        /// Tres num predio de 58 comodos: voce raramente ve duas, mas nunca
+        /// sabe se o corredor vazio esta vazio.
+        /// </summary>
+        public const int QuantidadeDeCriaturas = 3;
+        /// <summary>Distancia minima entre elas ao nascer: duas no mesmo comodo valem por uma.</summary>
+        public const float DistanciaEntreCriaturas = 30f;
+        /// <summary>Raio do chamado: quem te ve avisa as outras, como se gritasse.</summary>
+        public const float AlcanceDoChamado = 55f;
+        /// <summary>So se ouve o passo da que esta perto; tres somadas viram chiado.</summary>
+        public const float AlcanceDoSomDela = 30f;
     }
 }
