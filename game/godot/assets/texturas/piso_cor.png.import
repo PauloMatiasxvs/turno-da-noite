@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dbhlxev4nk3rr"
-path="res://.godot/imported/metal_aspereza.jpg-7f8622a0bfb6aeb46da5235fec8d730b.ctex"
+uid="uid://bmqgi8hgcq857"
+path="res://.godot/imported/piso_cor.png-05a91006e42e5aa13aa3df096876da02.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/texturas/metal_aspereza.jpg"
-dest_files=["res://.godot/imported/metal_aspereza.jpg-7f8622a0bfb6aeb46da5235fec8d730b.ctex"]
+source_file="res://assets/texturas/piso_cor.png"
+dest_files=["res://.godot/imported/piso_cor.png-05a91006e42e5aa13aa3df096876da02.ctex"]
 
 [params]
 

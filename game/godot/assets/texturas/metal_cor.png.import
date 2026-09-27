@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://b156fbke3bn01"
-path="res://.godot/imported/piso_normal.jpg-8051e31b2314cc5693be498aa5c23830.ctex"
+uid="uid://ba1hhbxv4h25n"
+path="res://.godot/imported/metal_cor.png-0796301f9bcd0732f84fb792570cc877.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/texturas/piso_normal.jpg"
-dest_files=["res://.godot/imported/piso_normal.jpg-8051e31b2314cc5693be498aa5c23830.ctex"]
+source_file="res://assets/texturas/metal_cor.png"
+dest_files=["res://.godot/imported/metal_cor.png-0796301f9bcd0732f84fb792570cc877.ctex"]
 
 [params]
 

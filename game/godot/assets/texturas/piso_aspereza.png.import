@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://blxox6nfj4jhx"
-path="res://.godot/imported/piso_cor.jpg-e8f61d60822e7fb04db7128313367440.ctex"
+uid="uid://bfylqa614ojek"
+path="res://.godot/imported/piso_aspereza.png-24fdac9ba338235e40fd9c753854ab82.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/texturas/piso_cor.jpg"
-dest_files=["res://.godot/imported/piso_cor.jpg-e8f61d60822e7fb04db7128313367440.ctex"]
+source_file="res://assets/texturas/piso_aspereza.png"
+dest_files=["res://.godot/imported/piso_aspereza.png-24fdac9ba338235e40fd9c753854ab82.ctex"]
 
 [params]
 

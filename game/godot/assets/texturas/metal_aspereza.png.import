@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://cppv24dsoh4nq"
-path="res://.godot/imported/metal_cor.jpg-5e0a07278b289ca7c50756fe6674f562.ctex"
+uid="uid://xemxggd5atbt"
+path="res://.godot/imported/metal_aspereza.png-3fd57234eeb17bd6f98be130adb9ebe5.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/texturas/metal_cor.jpg"
-dest_files=["res://.godot/imported/metal_cor.jpg-5e0a07278b289ca7c50756fe6674f562.ctex"]
+source_file="res://assets/texturas/metal_aspereza.png"
+dest_files=["res://.godot/imported/metal_aspereza.png-3fd57234eeb17bd6f98be130adb9ebe5.ctex"]
 
 [params]
 

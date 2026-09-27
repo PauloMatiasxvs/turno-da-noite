@@ -191,7 +191,9 @@ namespace TurnoDaNoite.Jogo
             // a ripa aparecer em vez de virar borrao
             _matParede = Texturizado("parede", new Color(0.62f, 0.50f, 0.36f), 0.42f)
                          ?? Fosco(new Color(0.26f, 0.25f, 0.23f));
-            _matPiso = Texturizado("piso", new Color(0.52f, 0.51f, 0.49f), 0.22f)
+            // escala baixa: com 0,22 o carpete repetia tanto que dava moire —
+            // aquele padrao de interferencia que so acontece em textura de jogo
+            _matPiso = Texturizado("piso", new Color(0.46f, 0.45f, 0.44f), 0.085f)
                        ?? Fosco(new Color(0.19f, 0.18f, 0.17f), 0.95f);
             // Texturado sempre que houver arquivo. Cor chapada num armário de
             // metal a um metro do nariz é a coisa que mais rápido entrega que
@@ -215,7 +217,7 @@ namespace TurnoDaNoite.Jogo
                 metal: Texturizado("metal", new Color(0.30f, 0.32f, 0.35f), 2.2f),
                 madeira: Texturizado("madeira", new Color(0.42f, 0.32f, 0.22f), 1.6f),
                 ferrugem: Texturizado("ferrugem", new Color(0.46f, 0.30f, 0.22f), 2.0f),
-                pele: Texturizado("criatura", new Color(0.30f, 0.27f, 0.28f), 1.1f));
+                pele: Texturizado("criatura", new Color(0.115f, 0.105f, 0.115f), 0.55f));
         }
 
         /// <summary>
@@ -275,6 +277,17 @@ namespace TurnoDaNoite.Jogo
             {
                 mat.RoughnessTexture = GD.Load<Texture2D>(aspereza);
                 mat.RoughnessTextureChannel = BaseMaterial3D.TextureChannel.Red;
+            }
+
+            // Mapa de metalicidade, quando vier um. Sem ele uma chapa de aço
+            // fica com o brilho de papelão: é o metalness que faz o reflexo
+            // acompanhar a luz em vez de espalhar por igual.
+            string metal = AcharTextura(nome, "metal");
+            if (metal != null)
+            {
+                mat.MetallicTexture = GD.Load<Texture2D>(metal);
+                mat.MetallicTextureChannel = BaseMaterial3D.TextureChannel.Red;
+                mat.Metallic = 1f;
             }
 
             return mat;
