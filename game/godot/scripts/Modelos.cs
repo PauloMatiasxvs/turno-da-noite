@@ -59,16 +59,22 @@ namespace TurnoDaNoite.Jogo
         public static void Texturas(StandardMaterial3D metal = null,
                                     StandardMaterial3D madeira = null,
                                     StandardMaterial3D ferrugem = null,
-                                    StandardMaterial3D pele = null)
+                                    StandardMaterial3D pele = null,
+                                    StandardMaterial3D metalDaMao = null,
+                                    StandardMaterial3D couroDaMao = null)
         {
             if (metal != null) _metalEscuro = metal;
             if (madeira != null) _madeira = madeira;
             if (ferrugem != null) _ferrugem = ferrugem;
             if (pele != null) _peleDela = pele;
+            if (metalDaMao != null) _metalDaMao = metalDaMao;
+            if (couroDaMao != null) _couroDaMao = couroDaMao;
         }
 
         /// <summary>Pele da criatura, se alguem entregar uma. Triplanar, porque ela nao tem UV.</summary>
         static StandardMaterial3D _peleDela;
+        /// <summary>Materiais da mao em primeira pessoa, entregues por quem monta a cena.</summary>
+        static StandardMaterial3D _metalDaMao, _couroDaMao;
 
         static StandardMaterial3D _ferrugem;
         static StandardMaterial3D Ferrugem => _ferrugem ??= new StandardMaterial3D
@@ -589,8 +595,13 @@ namespace TurnoDaNoite.Jogo
         {
             var raiz = new Node3D();
 
-            // ---- materiais: todos escuros, e todos DIFERENTES entre si
-            var aluminio = new StandardMaterial3D
+            // ---- materiais
+            //
+            // Texturados quando houver arquivo. Enquanto o predio inteiro
+            // ganhou textura e a mao ficou em cor chapada, ela virou a unica
+            // coisa lisa na tela — e era POR ISSO que destoava, mais do que
+            // pela forma.
+            var aluminio = _metalDaMao ?? new StandardMaterial3D
             {
                 AlbedoColor = new Color(0.115f, 0.120f, 0.130f),
                 Metallic = 0.85f, Roughness = 0.34f
@@ -599,7 +610,7 @@ namespace TurnoDaNoite.Jogo
             {
                 AlbedoColor = new Color(0.045f, 0.045f, 0.050f), Roughness = 0.93f
             };
-            var luva = new StandardMaterial3D
+            var luva = _couroDaMao ?? new StandardMaterial3D
             {
                 // couro escuro puxado para o quente: a luva cinza-azulada
                 // sumia dentro da luz ambiente, que também é azulada
@@ -704,26 +715,21 @@ namespace TurnoDaNoite.Jogo
             polegar2.RotateY(-0.12f);
             raiz.AddChild(polegar2);
 
-            // ---- punho, canhão da manga e antebraço
-            var punho = Cilindro(0.036f, 0.055f, luvaVinco, new Vector3(0.036f, -0.036f, 0.098f), 14);
+            // ---- punho, e SÓ.
+            //
+            // O antebraço saiu. Um cilindro de vinte e quatro centímetros
+            // atravessando o canto inferior da tela vira salsicha, e nenhuma
+            // textura conserta isso — o que conserta é não estar lá. Jogo de
+            // terror em primeira pessoa mostra o objeto e um pedaço da luva;
+            // o braço fica fora de quadro, que é onde ele estaria mesmo se
+            // você olhasse para a frente segurando uma lanterna.
+            var punho = Cilindro(0.034f, 0.052f, luvaVinco, new Vector3(0.030f, -0.030f, 0.095f), 14);
             punho.RotateX(Mathf.Pi / 2 - 0.42f);
             raiz.AddChild(punho);
 
-            var canhao = Cilindro(0.043f, 0.030f, manga, new Vector3(0.042f, -0.055f, 0.128f), 14);
+            var canhao = Cilindro(0.040f, 0.026f, manga, new Vector3(0.035f, -0.046f, 0.120f), 14);
             canhao.RotateX(Mathf.Pi / 2 - 0.42f);
             raiz.AddChild(canhao);
-
-            var antebraco = new MeshInstance3D
-            {
-                Mesh = new CylinderMesh
-                {
-                    TopRadius = 0.040f, BottomRadius = 0.056f, Height = 0.24f, RadialSegments = 14
-                },
-                MaterialOverride = manga,
-                Position = new Vector3(0.055f, -0.108f, 0.230f)
-            };
-            antebraco.RotateX(Mathf.Pi / 2 - 0.42f);
-            raiz.AddChild(antebraco);
 
             return raiz;
         }

@@ -217,7 +217,11 @@ namespace TurnoDaNoite.Jogo
                 metal: Texturizado("metal", new Color(0.30f, 0.32f, 0.35f), 2.2f),
                 madeira: Texturizado("madeira", new Color(0.42f, 0.32f, 0.22f), 1.6f),
                 ferrugem: Texturizado("ferrugem", new Color(0.46f, 0.30f, 0.22f), 2.0f),
-                pele: Texturizado("criatura", new Color(0.115f, 0.105f, 0.115f), 0.55f));
+                pele: Texturizado("criatura", new Color(0.115f, 0.105f, 0.115f), 0.55f),
+                // escala ALTA aqui: a mao tem dez centimetros, entao a textura
+                // precisa repetir muito para o grao aparecer no tamanho certo
+                metalDaMao: Texturizado("metal", new Color(0.24f, 0.25f, 0.27f), 9f),
+                couroDaMao: Texturizado("couro", new Color(0.115f, 0.095f, 0.085f), 14f));
         }
 
         /// <summary>
@@ -389,7 +393,9 @@ namespace TurnoDaNoite.Jogo
             // mais longe e mais para dentro do que estava: a 46 cm a manga tomava
             // o canto inferior direito inteiro, e encostada na borda a mao saia
             // cortada pela metade
-            _mao.Position = new Vector3(0.165f, -0.175f, -0.56f);
+            // mais para baixo e para o canto: o que precisa aparecer e a
+            // lanterna e um pedaco da luva, nao o antebraco inteiro
+            _mao.Position = new Vector3(0.185f, -0.215f, -0.60f);
 
             // A mão inteira é uma peça só, montada em Modelos: dedos em volta do
             // tubo, cabeça cônica e manga. Antes eram dois cilindros soltos, e
@@ -1408,7 +1414,7 @@ namespace TurnoDaNoite.Jogo
             float pisoDoAndar = Predio.AlturaDoAndar(j.Andar);
             var olho = new Vector3(j.Pos.X, pisoDoAndar + j.AlturaOlho + sobe + tremor, j.Pos.Z);
 
-            // Escondido, a câmera encosta ATRÁS DA PORTA, não no centro da
+            // Escondido, a camera encosta ATRAS DA PORTA, não no centro da
             // caixa. No centro você ficava dentro da chapa do fundo e do
             // corpo do móvel; encostado na porta você espia pelas venezianas,
             // que é o que se faz dentro de um armário.
@@ -1439,7 +1445,7 @@ namespace TurnoDaNoite.Jogo
                 float alvoX = Mathf.Sin(_balanco) * 0.012f;
                 float alvoY = Mathf.Abs(Mathf.Cos(_balanco)) * 0.010f;
                 _balancoDaMao = _balancoDaMao.Lerp(new Vector2(alvoX, alvoY), Mathf.Min(1f, dt * 8f));
-                _mao.Position = new Vector3(0.165f + _balancoDaMao.X, -0.175f + _balancoDaMao.Y, -0.56f);
+                _mao.Position = new Vector3(0.185f + _balancoDaMao.X, -0.215f + _balancoDaMao.Y, -0.60f);
                 _mao.Rotation = new Vector3(_balancoDaMao.Y * 2.5f, -_balancoDaMao.X * 3f, 0);
                 _mao.Visible = !j.Escondido;
                 if (_matVidro != null)
