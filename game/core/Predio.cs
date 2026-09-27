@@ -706,6 +706,35 @@ namespace TurnoDaNoite.Core
             return achadas;
         }
 
+        /// <summary>
+        /// Os VÃOS DE PORTA do andar: células de chão com parede dos dois
+        /// lados opostos, ou seja, o buraco que um corredor abriu na parede de
+        /// um cômodo. O bool diz se a passagem corre no eixo X.
+        ///
+        /// Serve para pôr batente e porta. Sem isso os cômodos se ligam por
+        /// buracos secos no concreto, e nenhuma quantidade de textura faz um
+        /// buraco seco parecer a porta de um prédio.
+        /// </summary>
+        public List<(Celula celula, bool noEixoX)> Vaos(int andar)
+        {
+            var achados = new List<(Celula, bool)>();
+
+            for (int cz = 1; cz < Profundidade - 1; cz++)
+                for (int cx = 1; cx < Largura - 1; cx++)
+                {
+                    if (EhParede(cx, cz, andar)) continue;
+
+                    bool paredeNoZ = EhParede(cx, cz - 1, andar) && EhParede(cx, cz + 1, andar);
+                    bool paredeNoX = EhParede(cx - 1, cz, andar) && EhParede(cx + 1, cz, andar);
+
+                    // os dois ao mesmo tempo seria um poço, não uma passagem
+                    if (paredeNoZ == paredeNoX) continue;
+
+                    achados.Add((new Celula(cx, cz, andar), paredeNoZ));
+                }
+            return achados;
+        }
+
         /// <summary>Uma célula livre dentro da sala, ou o centro se a sala estiver cheia.</summary>
         public Celula PontoLivre(Sala s, Random rng, int margem = 1)
         {

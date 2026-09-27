@@ -507,6 +507,7 @@ namespace TurnoDaNoite.Jogo
             }
 
             MontarAcabamentoDasParedes(raiz, andar);
+            MontarPortasInternas(raiz, andar);
 
             // luminárias mortas por sala; uma em cada quatro ainda pisca
             int n = 0;
@@ -519,18 +520,28 @@ namespace TurnoDaNoite.Jogo
                 lum.Position = new Vector3(m.X, Predio.PeDireito - 0.2f, m.Z);
                 raiz.AddChild(lum);
 
-                if (n++ % 4 == 0)
+                // Metade dos cômodos tem luz funcionando, e ela ILUMINA de
+                // verdade. Estava em um a cada quatro, com energia 0,9: o
+                // prédio inteiro era preto e só o facho existia, e nada do
+                // acabamento que se pôs nas paredes aparecia. Um prédio sem
+                // energia ainda tem luz de emergência acesa em parte dele —
+                // e o escuro assusta mais quando há luz perto para comparar.
+                if (n++ % 2 == 0)
                 {
                     var luz = new OmniLight3D
                     {
                         LightCullMask = CamadaDoMundo,
-                        LightColor = new Color(1f, 0.55f, 0.25f),
-                        LightEnergy = 0.9f,
-                        OmniRange = 9f,
-                        ShadowEnabled = false,
+                        LightColor = new Color(1f, 0.72f, 0.42f),
+                        LightEnergy = 3.2f,
+                        OmniRange = 16f,
+                        OmniAttenuation = 1.1f,
+                        ShadowEnabled = true,
+                        DistanceFadeBegin = 26f,
+                        DistanceFadeLength = 8f,
                         Position = new Vector3(m.X, Predio.PeDireito - 0.35f, m.Z)
                     };
-                    luz.AddChild(new Piscar());
+                    // só uma em cada três pisca: piscar em todas vira discoteca
+                    if (n % 3 == 0) luz.AddChild(new Piscar());
                     raiz.AddChild(luz);
                 }
             }
@@ -550,13 +561,25 @@ namespace TurnoDaNoite.Jogo
             var predio = _partida.Predio;
             float meio = Predio.Celula / 2f;
 
+            // Alturas de marcenaria de verdade. O erro da primeira tentativa foi
+            // pôr só uma LISTRINHA na parede: na referência o terço de baixo é
+            // um painel inteiro, de outro material e outra cor, e é o contraste
+            // entre os dois que faz o corredor parecer construído por alguém.
+            const float alturaPainel = 1.10f;
+            const float alturaRodape = 0.16f;
+
+            var painelMat = Texturizado("reboco", new Color(0.56f, 0.55f, 0.51f), 0.55f)
+                            ?? new StandardMaterial3D
+                            {
+                                AlbedoColor = new Color(0.30f, 0.29f, 0.27f), Roughness = 0.82f
+                            };
             var rodapeMat = new StandardMaterial3D
             {
-                AlbedoColor = new Color(0.115f, 0.112f, 0.105f), Roughness = 0.85f
+                AlbedoColor = new Color(0.085f, 0.082f, 0.078f), Roughness = 0.86f
             };
             var frisoMat = new StandardMaterial3D
             {
-                AlbedoColor = new Color(0.165f, 0.160f, 0.148f), Roughness = 0.80f
+                AlbedoColor = new Color(0.20f, 0.19f, 0.175f), Roughness = 0.72f
             };
 
             for (int cz = 1; cz < predio.Profundidade - 1; cz++)
@@ -570,32 +593,113 @@ namespace TurnoDaNoite.Jogo
                         if (predio.EhParede(cx + dx, cz + dz, andar)) continue;
 
                         var m = predio.ParaMundo(new Celula(cx, cz, andar));
-                        float px = m.X + dx * (meio + 0.02f);
-                        float pz = m.Z + dz * (meio + 0.02f);
+                        bool noEixoX = dx != 0;
 
-                        var tamanho = dx != 0
-                            ? new Vector3(0.05f, 1f, Predio.Celula)
-                            : new Vector3(Predio.Celula, 1f, 0.05f);
+                        Vector3 Chapa(float espessura, float altura) => noEixoX
+                            ? new Vector3(espessura, altura, Predio.Celula)
+                            : new Vector3(Predio.Celula, altura, espessura);
 
-                        var rodape = new MeshInstance3D
+                        void Por(float espessura, float altura, float y, Material mat)
                         {
-                            Mesh = new BoxMesh { Size = new Vector3(tamanho.X, 0.14f, tamanho.Z) },
-                            MaterialOverride = rodapeMat,
-                            Position = new Vector3(px, 0.07f, pz),
-                            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
-                        };
-                        raiz.AddChild(rodape);
+                            float fora = meio + espessura / 2f + 0.005f;
+                            raiz.AddChild(new MeshInstance3D
+                            {
+                                Mesh = new BoxMesh { Size = Chapa(espessura, altura) },
+                                MaterialOverride = mat,
+                                Position = new Vector3(m.X + dx * fora, y, m.Z + dz * fora),
+                                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
+                            });
+                        }
 
-                        var friso = new MeshInstance3D
-                        {
-                            Mesh = new BoxMesh { Size = new Vector3(tamanho.X, 0.07f, tamanho.Z) },
-                            MaterialOverride = frisoMat,
-                            Position = new Vector3(px, 1.12f, pz),
-                            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
-                        };
-                        raiz.AddChild(friso);
+                        // o painel de baixo, que é a peça grande
+                        Por(0.035f, alturaPainel, alturaPainel / 2f, painelMat);
+                        // o friso que remata o painel, saliente
+                        Por(0.075f, 0.075f, alturaPainel + 0.02f, frisoMat);
+                        Por(0.055f, 0.035f, alturaPainel + 0.075f, frisoMat);
+                        // e o rodapé, mais saliente ainda
+                        Por(0.070f, alturaRodape, alturaRodape / 2f, rodapeMat);
                     }
                 }
+        }
+
+        /// <summary>
+        /// Batente e porta em cada vão entre cômodos.
+        ///
+        /// Sem isto os cômodos se ligam por buracos secos no concreto, e nenhuma
+        /// quantidade de textura faz um buraco seco parecer a porta de um
+        /// prédio. A folha fica encostada e aberta para um dos lados — porta
+        /// fechada precisaria de colisão e de abrir, e o jogo não pede isso.
+        /// </summary>
+        void MontarPortasInternas(Node3D raiz, int andar)
+        {
+            var predio = _partida.Predio;
+
+            var batenteMat = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.175f, 0.165f, 0.150f), Roughness = 0.78f
+            };
+            var folhaMat = Texturizado("metal", new Color(0.30f, 0.31f, 0.32f), 1.2f)
+                           ?? new StandardMaterial3D
+                           {
+                               AlbedoColor = new Color(0.20f, 0.21f, 0.22f), Roughness = 0.6f
+                           };
+
+            const float alturaVao = 2.25f;
+            const float larguraVao = 1.35f;
+
+            foreach (var (celula, noEixoX) in predio.Vaos(andar))
+            {
+                // o poço da escada não é porta
+                if (predio.EscadaEm(celula) != null) continue;
+
+                var m = predio.ParaMundo(celula);
+                var no = new Node3D { Position = new Vector3(m.X, 0, m.Z) };
+                if (!noEixoX) no.RotateY(Mathf.Pi / 2);
+
+                // Batente: duas ombreiras e a verga. As ombreiras ficam nas
+                // pontas da célula, deixando o vão de 1,35 m no meio — largo o
+                // bastante para você passar correndo sem enganchar.
+                foreach (float lado in new[] { -1f, 1f })
+                    no.AddChild(new MeshInstance3D
+                    {
+                        Mesh = new BoxMesh { Size = new Vector3(0.16f, alturaVao, 0.34f) },
+                        MaterialOverride = batenteMat,
+                        Position = new Vector3(lado * (larguraVao / 2 + 0.08f), alturaVao / 2, 0),
+                        CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
+                    });
+
+                no.AddChild(new MeshInstance3D
+                {
+                    Mesh = new BoxMesh { Size = new Vector3(larguraVao + 0.32f, 0.18f, 0.34f) },
+                    MaterialOverride = batenteMat,
+                    Position = new Vector3(0, alturaVao + 0.09f, 0),
+                    CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
+                });
+
+                // a folha, escancarada contra a parede, e a maçaneta
+                var folha = new Node3D
+                {
+                    Position = new Vector3(-(larguraVao / 2 + 0.08f), 0, 0.14f)
+                };
+                folha.RotateY(-1.42f);
+                folha.AddChild(new MeshInstance3D
+                {
+                    Mesh = new BoxMesh { Size = new Vector3(larguraVao * 0.92f, alturaVao - 0.06f, 0.05f) },
+                    MaterialOverride = folhaMat,
+                    Position = new Vector3(larguraVao * 0.46f, (alturaVao - 0.06f) / 2, 0),
+                    CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
+                });
+                folha.AddChild(new MeshInstance3D
+                {
+                    Mesh = new CylinderMesh { TopRadius = 0.022f, BottomRadius = 0.022f, Height = 0.12f, RadialSegments = 8 },
+                    MaterialOverride = batenteMat,
+                    Position = new Vector3(larguraVao * 0.84f, 1.02f, 0.05f),
+                    CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
+                });
+                no.AddChild(folha);
+
+                raiz.AddChild(no);
+            }
         }
 
         /// <summary>
