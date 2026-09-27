@@ -26,12 +26,78 @@ namespace TurnoDaNoite.Tests
         public void TodoMovelEntraNaListaDeSolidos()
         {
             var p = Nova();
-            int esperado = p.Recipientes.Count
-                         + p.Armarios.Count
-                         + p.Adornos.Count(a => a.Solido)
-                         + 1;                                  // o quadro elétrico
+            int moveis = p.Recipientes.Count
+                       + p.Armarios.Count
+                       + p.Adornos.Count(a => a.Solido)
+                       + 1;                                    // o quadro elétrico
+
+            // batentes e montantes de escada entram também, dois de cada
+            int vaos = 0;
+            for (int a = 0; a < p.Predio.Andares; a++)
+                vaos += p.Predio.Vaos(a).Count(v => p.Predio.EscadaEm(v.celula) == null);
+            int esperado = moveis + vaos * 2 + p.Predio.Escadas.Count * 4;
+
             Assert.Equal(esperado, p.Solidos.Count);
             Assert.All(p.Solidos, s => Assert.True(s.Raio > 0.01f));
+        }
+
+        [Theory]
+        [InlineData(1)]
+        [InlineData(1234)]
+        [InlineData(4242)]
+        public void OBatenteDaPortaTemCorpo(int semente)
+        {
+            // Eram dezenas, um por vão, e eram desenho puro: dava para
+            // atravessar a ombreira de todas as portas do prédio.
+            var p = Nova(semente);
+            var vaos = p.Predio.Vaos(0).Where(v => p.Predio.EscadaEm(v.celula) == null).Take(8);
+
+            foreach (var (celula, noEixoX) in vaos)
+            {
+                var m = p.Predio.ParaMundo(celula);
+                // um ponto em cima da ombreira, de um lado
+                var dentro = noEixoX
+                    ? new P2(m.X + Regras.MeioVaoDaPorta, m.Z)
+                    : new P2(m.X, m.Z + Regras.MeioVaoDaPorta);
+
+                var fora = Colisao.Empurrar(dentro, Regras.RaioJogador, p.Solidos, 0);
+                Assert.True(P2.Distancia(fora, dentro) > 0.1f,
+                    $"atravessei o batente do vão em {celula}");
+            }
+        }
+
+        [Theory]
+        [InlineData(1)]
+        [InlineData(1234)]
+        [InlineData(4242)]
+        public void OVaoDaPortaContinuaPassavel(int semente)
+        {
+            // o perigo do conserto: fechar a porta que se queria emoldurar
+            var p = Nova(semente);
+            foreach (var (celula, _) in p.Predio.Vaos(0))
+            {
+                var m = p.Predio.ParaMundo(celula);
+                Assert.True(Colisao.Livre(m, Regras.RaioJogador, p.Solidos, 0),
+                    $"o meio do vão em {celula} ficou bloqueado");
+            }
+        }
+
+        [Fact]
+        public void OLanceDaEscadaTemCorpoMasOPocoFicaLivre()
+        {
+            var p = Nova();
+            var e = p.Predio.Escadas[0];
+            var m = p.Predio.ParaMundo(new Celula(e.Cx, e.Cz, e.De));
+
+            // o montante empurra
+            var noMontante = new P2(m.X + Regras.MeioLanceDaEscada, m.Z);
+            Assert.True(P2.Distancia(
+                Colisao.Empurrar(noMontante, Regras.RaioJogador, p.Solidos, e.De), noMontante) > 0.1f,
+                "atravessei o lance de escada de lado");
+
+            // mas o meio continua livre: pisar nele é o que troca de andar
+            Assert.True(Colisao.Livre(m, Regras.RaioJogador, p.Solidos, e.De),
+                "bloqueei o poço e o andar de cima ficou inalcançável");
         }
 
         [Theory]

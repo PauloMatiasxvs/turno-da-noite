@@ -160,3 +160,20 @@ código justamente para que ninguém precise pedir licença a ninguém.
 Textura extraída de um jogo pago é do estúdio que a fez; usá-la fecha a
 porta de vender, de publicar na Steam e de mostrar o repositório em
 público. É o único tipo de asset que este projeto recusa.
+
+## Braços em primeira pessoa (`mao_com_lanterna`)
+
+A mão é montada em código. Para trocar por um modelo de verdade, ponha um
+arquivo `mao_com_lanterna.glb` em `assets/modelos/` — o registro em
+`Props.cs` prefere o arquivo e nada de código muda.
+
+Onde achar, com licença que permite vender:
+
+- **Mixamo** (Adobe, grátis, uso comercial liberado): personagens com rig.
+  Baixe um, abra no Blender e exporte só os braços.
+- **Sketchfab**: filtre por *Downloadable* e por **CC0** ou **CC-BY**;
+  procure "fps arms". CC-BY exige crédito num arquivo de créditos.
+- **Quaternius** e **Kenney**: CC0, mas não têm braços em primeira pessoa.
+
+O modelo precisa olhar para **−Z** e ter a origem no punho. Se vier virado,
+`GiroDoModelo` em `Bootstrap.cs` resolve.

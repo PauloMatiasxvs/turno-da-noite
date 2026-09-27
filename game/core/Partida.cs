@@ -417,6 +417,38 @@ namespace TurnoDaNoite.Core
                 if (a.Solido) Solidos.Add(new Solido(a.Pos, a.Andar, a.Raio));
 
             Solidos.Add(new Solido(Quadro, QuadroAndar, Regras.RaioQuadro));
+
+            // Os BATENTES das portas. São dezenas, um por vão, e eram desenho:
+            // você atravessava a ombreira de todas as portas do prédio. Ficam
+            // nas pontas da célula e deixam livre o vão do meio — o suficiente
+            // para passar correndo sem enganchar.
+            for (int andar = 0; andar < Predio.Andares; andar++)
+                foreach (var (celula, noEixoX) in Predio.Vaos(andar))
+                {
+                    if (Predio.EscadaEm(celula) != null) continue;
+
+                    var m = Predio.ParaMundo(celula);
+                    foreach (float lado in new[] { -1f, 1f })
+                    {
+                        float dx = noEixoX ? lado * Regras.MeioVaoDaPorta : 0f;
+                        float dz = noEixoX ? 0f : lado * Regras.MeioVaoDaPorta;
+                        Solidos.Add(new Solido(new P2(m.X + dx, m.Z + dz), andar,
+                                               Regras.RaioDoBatente, soParaOJogador: true));
+                    }
+                }
+
+            // Os MONTANTES do lance de escada, dos dois lados. O poço em si
+            // fica livre: pisar nele é o que troca de andar, e bloquear a
+            // entrada deixaria o andar de cima inalcançável. O que se ganha é
+            // não atravessar o lance de lado, como se ele não estivesse lá.
+            foreach (var e in Predio.Escadas)
+                foreach (int andar in new[] { e.De, e.Para })
+                {
+                    var m = Predio.ParaMundo(new Celula(e.Cx, e.Cz, andar));
+                    foreach (float lado in new[] { -1f, 1f })
+                        Solidos.Add(new Solido(new P2(m.X + lado * Regras.MeioLanceDaEscada, m.Z),
+                                               andar, Regras.RaioDoMontante, soParaOJogador: true));
+                }
         }
 
         /// <summary>
@@ -1233,7 +1265,8 @@ namespace TurnoDaNoite.Core
             // armário na frente do jogador acabaria com o susto. Raio menor
             // porque o caminho dela ignora mobília, e ela precisa conseguir
             // espremer em vez de ficar presa num corredor mobiliado.
-            c.Pos = Colisao.Empurrar(c.Pos, Regras.RaioCriaturaEmMoveis, Solidos, c.Andar);
+            c.Pos = Colisao.Empurrar(c.Pos, Regras.RaioCriaturaEmMoveis, Solidos, c.Andar,
+                                     ehOJogador: false);
             c.Pos = Predio.EmpurrarFora(c.Pos, 0.5f, c.Andar);
         }
 

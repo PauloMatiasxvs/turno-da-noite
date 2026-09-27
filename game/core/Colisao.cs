@@ -15,7 +15,23 @@ namespace TurnoDaNoite.Core
         public int Andar;
         public float Raio;
 
-        public Solido(P2 pos, int andar, float raio) { Pos = pos; Andar = andar; Raio = raio; }
+        /// <summary>
+        /// Só o jogador esbarra nisto. Vale para detalhe de arquitetura —
+        /// batente de porta, montante de escada.
+        ///
+        /// Existe porque dar corpo aos batentes prendeu a criatura: o caminho
+        /// dela é calculado sobre a grade, que não conhece ombreira, então ela
+        /// mirava o centro da célula e raspava no batente até parar. Em vinte
+        /// segundos ela andou quatro metros. O jogador continua sem atravessar
+        /// a ombreira; ela passa raspando, que é o que um bicho daquele tamanho
+        /// faria mesmo.
+        /// </summary>
+        public bool SoParaOJogador;
+
+        public Solido(P2 pos, int andar, float raio, bool soParaOJogador = false)
+        {
+            Pos = pos; Andar = andar; Raio = raio; SoParaOJogador = soParaOJogador;
+        }
     }
 
     /// <summary>
@@ -28,12 +44,14 @@ namespace TurnoDaNoite.Core
     /// </summary>
     public static class Colisao
     {
-        public static P2 Empurrar(P2 p, float raio, IReadOnlyList<Solido> solidos, int andar)
+        public static P2 Empurrar(P2 p, float raio, IReadOnlyList<Solido> solidos, int andar,
+                                  bool ehOJogador = true)
         {
             for (int i = 0; i < solidos.Count; i++)
             {
                 var s = solidos[i];
                 if (s.Andar != andar || s.Raio <= 0.01f) continue;
+                if (s.SoParaOJogador && !ehOJogador) continue;
 
                 float soma = raio + s.Raio;
                 float dx = p.X - s.Pos.X, dz = p.Z - s.Pos.Z;

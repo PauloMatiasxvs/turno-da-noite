@@ -143,6 +143,8 @@ namespace TurnoDaNoite.Jogo
             MontarPredio();
             MontarItens();
 
+            MontarTratamentoDeImagem();
+
             _hud = new Hud();
             AddChild(_hud);
 
@@ -167,6 +169,37 @@ namespace TurnoDaNoite.Jogo
             }
 
             CapturarMouse(!_autoTeste && !_naAbertura);
+        }
+
+        /// <summary>
+        /// Grão, vinheta, preto esmagado e um fio de aberração cromática.
+        ///
+        /// É a camada que separa "render de motor" de "cena de filme", e custa
+        /// um quad de tela cheia. Vai numa CanvasLayer ABAIXO da HUD — com a
+        /// interface dentro, o texto pegaria grão e vinheta e ficaria sujo.
+        ///
+        /// Se o arquivo do shader sumir, o jogo roda sem ele: o tratamento é
+        /// melhoria de imagem, não regra de jogo.
+        /// </summary>
+        void MontarTratamentoDeImagem()
+        {
+            const string caminho = "res://shaders/filme.gdshader";
+            if (!ResourceLoader.Exists(caminho)) return;
+
+            var shader = GD.Load<Shader>(caminho);
+            if (shader == null) return;
+
+            // camada -1: desenha depois do 3D e ANTES da HUD, que fica na 0.
+            // Com o filme por cima, o texto da interface pegava grao e vinheta.
+            var camada = new CanvasLayer { Name = "Filme", Layer = -1 };
+            camada.AddChild(new ColorRect
+            {
+                Material = new ShaderMaterial { Shader = shader },
+                AnchorRight = 1,
+                AnchorBottom = 1,
+                MouseFilter = Control.MouseFilterEnum.Ignore
+            });
+            AddChild(camada);
         }
 
         // ------------------------------------------------------------- cenário
@@ -592,12 +625,21 @@ namespace TurnoDaNoite.Jogo
                 Position = new Vector3(porta.X, 3.05f, porta.Z + 0.95f)
             });
             foreach (float lado in new[] { -1f, 1f })
+            {
+                var x = porta.X + lado * Predio.Celula * 1.2f;
+                float z = porta.Z + 1.75f;
+
                 fora.AddChild(new MeshInstance3D
                 {
                     Mesh = new BoxMesh { Size = new Vector3(0.12f, 3.0f, 0.12f) },
                     MaterialOverride = chapa,
-                    Position = new Vector3(porta.X + lado * Predio.Celula * 1.2f, 1.5f, porta.Z + 1.75f)
+                    Position = new Vector3(x, 1.5f, z)
                 });
+
+                // o montante tem corpo: poste que se atravessa e pior do que
+                // poste nenhum, porque a tela mostra uma coisa e o corpo outra
+                _partida.Solidos.Add(new Solido(new P2(x, z), 0, 0.16f));
+            }
 
             // ---- a luz sobre a porta: é o farol que diz "a entrada é aqui"
             var luminaria = new MeshInstance3D
@@ -1176,6 +1218,32 @@ namespace TurnoDaNoite.Jogo
             var sala = _partida.Predio.SalaEm(pos);
             if (sala == null) return Predio.Celula * 3f;
             return Mathf.Max(sala.Larg, sala.Alt) * Predio.Celula * 0.9f;
+        }
+
+        /// <summary>O nó de cena de um adorno, achado pela posição. Só o diagnóstico usa.</summary>
+        Node3D AcharNoDoAdorno(Adorno a)
+        {
+            if (!_raizPorAndar.TryGetValue(a.Andar, out var raiz)) return null;
+            foreach (var filho in raiz.GetChildren())
+                if (filho is Node3D n &&
+                    Mathf.Abs(n.Position.X - a.Pos.X) < 0.02f &&
+                    Mathf.Abs(n.Position.Z - a.Pos.Z) < 0.02f) return n;
+            return null;
+        }
+
+        static Aabb MedirNo(Node3D raiz)
+        {
+            var total = new Aabb();
+            bool primeiro = true;
+            foreach (var n in TodosOsNos(raiz))
+            {
+                if (n is not VisualInstance3D v) continue;
+                var c = v.GetAabb();
+                // leva a escala do nó em conta, senão mede o modelo cru
+                c = new Aabb(c.Position * v.Scale, c.Size * v.Scale);
+                if (primeiro) { total = c; primeiro = false; } else total = total.Merge(c);
+            }
+            return total;
         }
 
         static Node3D AcharPorNome(Node raiz, string nome)
@@ -1813,6 +1881,24 @@ namespace TurnoDaNoite.Jogo
                    P2.Distancia(antes, _partida.Ela.Pos) > 5f);
             Checar("posições finitas",
                    !float.IsNaN(_partida.Ela.Pos.X) && !float.IsNaN(_partida.Jogador.Pos.X));
+
+            // Quem e grande na tela e pequeno na colisao: e isso que faz o
+            // jogador atravessar a metade de um movel e chamar de bug. Roda
+            // sempre, para a proxima peca que entrar torta ser reprovada aqui
+            // e nao na mao de quem joga.
+            var tortos = new List<string>();
+            foreach (var a in _partida.Adornos)
+            {
+                if (!a.Solido) continue;
+                var no = AcharNoDoAdorno(a);
+                if (no == null) continue;
+                float meiaLargura = Mathf.Max(MedirNo(no).Size.X, MedirNo(no).Size.Z) / 2f;
+                if (meiaLargura > a.Raio + 0.25f) tortos.Add(a.Tipo.ToString());
+            }
+            Checar(tortos.Count == 0
+                ? "todo movel colide do tamanho que aparece"
+                : "movel maior na tela do que na colisao: " + string.Join(", ", tortos.Distinct()),
+                tortos.Count == 0);
 
             GD.Print(Props.Relatorio());
             GD.Print(ok ? "auto-teste: TUDO CERTO" : "auto-teste: FALHOU");

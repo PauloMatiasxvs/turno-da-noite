@@ -151,6 +151,19 @@ namespace TurnoDaNoite.Core
         public const float RaioQuadro = 0.50f;
         /// <summary>Raio dela contra móveis. Menor que o corpo: o caminho dela ignora mobília, então precisa caber espremendo.</summary>
         public const float RaioCriaturaEmMoveis = 0.30f;
+
+        // ---------------- batente e escada ----------------
+        /// <summary>
+        /// Onde fica a ombreira da porta, medida do meio da célula. O vão livre
+        /// entre as duas é o que sobra: com 0,755 e raio 0,22, passa 1,07 m —
+        /// e o jogador tem 0,76 m de largura.
+        /// </summary>
+        public const float MeioVaoDaPorta = 0.755f;
+        public const float RaioDoBatente = 0.22f;
+
+        /// <summary>Montantes do lance de escada. O meio fica livre: pisar nele é o que troca de andar.</summary>
+        public const float MeioLanceDaEscada = 0.93f;
+        public const float RaioDoMontante = 0.24f;
         /// <summary>Altura dela, em metros. Mais alta que gente, e é para ser.</summary>
         public const float AlturaDaCriatura = 2.35f;
 
