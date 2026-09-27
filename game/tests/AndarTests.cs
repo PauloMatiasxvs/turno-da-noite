@@ -39,6 +39,43 @@ namespace TurnoDaNoite.Tests
         }
 
         [Fact]
+        public void SairDaEscadaNaoDeixaVoceDentroDela()
+        {
+            // Este e o bug que apareceu na tela: so o andar mudava, entao voce
+            // chegava em cima parado no meio do lance, com os degraus
+            // atravessando o peito, e 0,8 s depois descia de novo.
+            var p = Nova();
+            var e = p.Predio.Escadas[0];
+            p.IrPara(PeDaEscada(p), e.De);
+
+            p.Passo(1f / 60f, Ajuda.Andando());
+            Assert.Equal(e.Para, p.Jogador.Andar);
+
+            var onde = p.Predio.ParaCelula(p.Jogador.Pos, p.Jogador.Andar);
+            Assert.Null(p.Predio.EscadaEm(onde));
+            Assert.False(p.Predio.EhParede(onde), "sai da escada para dentro de uma parede");
+        }
+
+        [Fact]
+        public void DaParaSubirEDescerDeNovoSemFicarPreso()
+        {
+            var p = Nova();
+            var e = p.Predio.Escadas[0];
+
+            p.IrPara(PeDaEscada(p), e.De);
+            p.Passo(1f / 60f, Ajuda.Andando());
+            Assert.Equal(e.Para, p.Jogador.Andar);
+
+            // espera a trava passar e volta a pisar na escada
+            p.Rodar(1.2f);
+            p.IrPara(PeDaEscada(p), p.Jogador.Andar);
+            p.Passo(1f / 60f, Ajuda.Andando());
+
+            Assert.Equal(e.De, p.Jogador.Andar);
+            Assert.Null(p.Predio.EscadaEm(p.Predio.ParaCelula(p.Jogador.Pos, p.Jogador.Andar)));
+        }
+
+        [Fact]
         public void NaoFicaSubindoEDescendoNoMesmoLugar()
         {
             // Sem trava, você chega em cima já em cima de uma escada e desce no

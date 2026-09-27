@@ -111,23 +111,80 @@ namespace TurnoDaNoite.Jogo
         {
             var raiz = new Node3D();
             float l = t.X, a = t.Y, p = t.Z;
+            const float chapa = 0.03f;
 
-            raiz.AddChild(Caixa(new Vector3(l, a, p), MetalEscuro, new Vector3(0, a / 2, 0)));
-            // porta um pouco menor e adiantada, para criar o vinco da fresta
-            raiz.AddChild(Caixa(new Vector3(l * 0.88f, a * 0.93f, 0.03f),
-                new StandardMaterial3D { AlbedoColor = new Color(0.26f, 0.28f, 0.30f), Metallic = 0.5f, Roughness = 0.6f },
-                new Vector3(0, a / 2, p / 2 + 0.015f)));
+            var frenteMat = new StandardMaterial3D
+            {
+// escuro: por dentro o armario nao tem luz, e a ripa iluminada so
+                // pelo ambiente azulado virava persiana de escritorio
+                AlbedoColor = new Color(0.135f, 0.145f, 0.150f), Metallic = 0.5f, Roughness = 0.65f
+            };
 
-            for (int i = 0; i < 4; i++)
-                raiz.AddChild(Caixa(new Vector3(l * 0.55f, 0.018f, 0.02f), Borracha,
-                    new Vector3(0, a * 0.80f - i * 0.055f, p / 2 + 0.035f)));
+            // O corpo é OCO: cinco chapas, não um cubo maciço.
+            //
+            // Isto não é capricho. O jogador se esconde AQUI DENTRO, e com o
+            // corpo maciço a câmera ficava dentro do concreto: o que aparecia
+            // na tela eram as faces internas da caixa, umas barras claras
+            // atravessando tudo, sem nada parecer armário.
+            raiz.AddChild(Caixa(new Vector3(l, a, chapa), MetalEscuro,
+                new Vector3(0, a / 2, -p / 2 + chapa / 2)));                    // costas
+            raiz.AddChild(Caixa(new Vector3(chapa, a, p), MetalEscuro,
+                new Vector3(-l / 2 + chapa / 2, a / 2, 0)));                    // lado
+            raiz.AddChild(Caixa(new Vector3(chapa, a, p), MetalEscuro,
+                new Vector3(l / 2 - chapa / 2, a / 2, 0)));                     // lado
+            raiz.AddChild(Caixa(new Vector3(l, chapa, p), MetalEscuro,
+                new Vector3(0, a - chapa / 2, 0)));                             // tampo
+            raiz.AddChild(Caixa(new Vector3(l, chapa, p), MetalEscuro,
+                new Vector3(0, chapa / 2, 0)));                                 // base
+            raiz.AddChild(Caixa(new Vector3(l * 0.86f, 0.02f, p * 0.8f), MetalEscuro,
+                new Vector3(0, a * 0.72f, 0)));                                 // prateleira de cima
 
-            raiz.AddChild(Caixa(new Vector3(0.05f, 0.14f, 0.035f), Metal,
-                new Vector3(l * 0.33f, a * 0.5f, p / 2 + 0.04f)));
-            raiz.AddChild(Caixa(new Vector3(0.03f, 0.06f, 0.03f), MetalEscuro,
-                new Vector3(-l * 0.42f, a * 0.80f, p / 2 + 0.02f)));
-            raiz.AddChild(Caixa(new Vector3(0.03f, 0.06f, 0.03f), MetalEscuro,
-                new Vector3(-l * 0.42f, a * 0.22f, p / 2 + 0.02f)));
+            // A PORTA, num pivô na dobradiça: quem monta a cena gira este nó
+            // para abri-la quando você entra.
+            var porta = new Node3D { Name = "Porta", Position = new Vector3(-l / 2, 0, p / 2) };
+
+            // A porta é só a METADE DE BAIXO cheia. A de cima é uma grelha de
+            // ripas com VÃO entre elas.
+            //
+            // Antes as venezianas eram ripas coladas numa porta inteiriça —
+            // decoração. Escondido dentro do armário, o que aparecia na tela
+            // era a chapa da porta a quinze centímetros do nariz, ou seja,
+            // nada. Com vão de verdade você enxerga o cômodo em faixas, que é
+            // exatamente o que se vê de dentro de um armário de vestiário.
+            const float alturaGrelha = 0.55f;                 // fração da porta
+            float baseGrelha = a * alturaGrelha;
+
+            porta.AddChild(Caixa(new Vector3(l * 0.96f, baseGrelha, 0.025f), frenteMat,
+                new Vector3(l * 0.48f, baseGrelha / 2, 0)));  // painel de baixo, cheio
+
+            // moldura da grelha: duas colunas e o topo
+            float alturaVao = a * 0.95f - baseGrelha;
+            foreach (float lado in new[] { 0.06f, 0.90f })
+                porta.AddChild(Caixa(new Vector3(l * 0.07f, alturaVao, 0.025f), frenteMat,
+                    new Vector3(l * lado, baseGrelha + alturaVao / 2, 0)));
+            porta.AddChild(Caixa(new Vector3(l * 0.96f, a * 0.045f, 0.025f), frenteMat,
+                new Vector3(l * 0.48f, a * 0.95f - a * 0.022f, 0)));
+
+            // as ripas, inclinadas, com ar entre uma e outra
+            const int ripas = 7;
+            for (int i = 0; i < ripas; i++)
+            {
+                float y = baseGrelha + alturaVao * (i + 0.5f) / ripas;
+                var ripa = Caixa(new Vector3(l * 0.80f, alturaVao / ripas * 0.42f, 0.014f),
+                                 frenteMat, new Vector3(l * 0.48f, y, 0));
+                ripa.RotateX(-0.55f);     // viradas para baixo, como veneziana de verdade
+                porta.AddChild(ripa);
+            }
+
+            porta.AddChild(Caixa(new Vector3(0.05f, 0.14f, 0.035f), Metal,
+                new Vector3(l * 0.82f, a * 0.5f, 0.03f)));                      // maçaneta
+            raiz.AddChild(porta);
+
+            // dobradiças, do lado do pivô
+            raiz.AddChild(Caixa(new Vector3(0.03f, 0.07f, 0.03f), MetalEscuro,
+                new Vector3(-l * 0.47f, a * 0.80f, p / 2 + 0.01f)));
+            raiz.AddChild(Caixa(new Vector3(0.03f, 0.07f, 0.03f), MetalEscuro,
+                new Vector3(-l * 0.47f, a * 0.22f, p / 2 + 0.01f)));
 
             return raiz;
         }

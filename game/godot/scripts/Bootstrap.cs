@@ -53,6 +53,14 @@ namespace TurnoDaNoite.Jogo
         }
         readonly List<NoRecipiente> _recipientes = new();
 
+        /// <summary>Um armario na cena, com a porta separada para poder abrir.</summary>
+        sealed class NoArmario
+        {
+            public Node3D Raiz, Porta;
+            public float Abertura;
+        }
+        readonly List<NoArmario> _armarios = new();
+
         Mapa _mapa;
         Pausa _telaPausa;
         bool _mapaAberto;
@@ -96,7 +104,7 @@ namespace TurnoDaNoite.Jogo
         bool _verRecipiente;
         // modos de captura do prédio de dois andares: sala do quadro lá em cima,
         // pé da escada, e a planta aberta na tela
-        bool _verAndarDeCima, _verMapa, _verEscada, _verCriatura, _verMapaDeCima;
+        bool _verAndarDeCima, _verMapa, _verEscada, _verCriatura, _verMapaDeCima, _verArmario;
 
         public override void _Ready()
         {
@@ -117,6 +125,7 @@ namespace TurnoDaNoite.Jogo
                 if (arg == "--verescada") _verEscada = true;
                 if (arg == "--vercriatura") _verCriatura = true;
                 if (arg == "--vermapacima") { _verMapa = true; _verMapaDeCima = true; }
+                if (arg == "--verarmario") _verArmario = true;
             }
 
             Opcoes.Carregar();
@@ -627,7 +636,11 @@ namespace TurnoDaNoite.Jogo
             {
                 var no = Props.Criar(Peca.Armario, new Vector3(1.0f, 2.0f, 0.62f), _matArmario);
                 no.Position = new Vector3(a.Pos.X, 0, a.Pos.Z);
+                // a porta olha para dentro do comodo, e nao todas para o mesmo
+                // lado: havia armario encostado de costas, com a porta no concreto
+                no.RotateY(a.Giro);
                 RaizDoAndar(a.Andar).AddChild(no);
+                _armarios.Add(new NoArmario { Raiz = no, Porta = AcharPorNome(no, "Porta") });
             }
 
             var quadro = Props.Criar(Peca.QuadroEletrico, new Vector3(1.5f, 1.9f, 0.42f), _matQuadro);
@@ -1032,7 +1045,23 @@ namespace TurnoDaNoite.Jogo
                 // e gira a câmera devagar para não fotografar sempre a mesma parede
                 if (!_naAbertura)
                 {
-                    if (_verCriatura)
+                    if (_verArmario)
+                    {
+                        // entra num armario e fica la: e de dentro dele que a
+                        // tela estava quebrada
+                        // entra no armario e fica la: e de dentro dele que a tela
+                        // estava quebrada
+                        var arm = _partida.Armarios[0];
+                        if (!_partida.Jogador.Escondido)
+                        {
+                            _partida.Jogador.Pos = arm.Pos;
+                            _partida.Jogador.Andar = arm.Andar;
+                            _partida.Interagir();
+                        }
+                        _giro = arm.Giro + Mathf.Pi;
+                        _inclinacao = -0.02f;
+                    }
+                    else if (_verCriatura)
                     {
                         // Encara ela de frente numa sala, os dois parados. Sem
                         // fixar os dois, a simulação a levava embora e a foto
@@ -1068,6 +1097,7 @@ namespace TurnoDaNoite.Jogo
                         _partida.Jogador.Pos = new P2(rec.Pos.X, rec.Pos.Z + 1.7f);
                         _giro = 0; _inclinacao = -0.35f;
                         SincronizarRecipientes(dt);
+            SincronizarArmarios(dt);
                     }
                     else if (_verItem)
                     {
@@ -1078,7 +1108,7 @@ namespace TurnoDaNoite.Jogo
                     }
                     else { _partida.Passo(1f / 60f, new Comando()); _giro += dt * 0.35f; }
                 }
-                if (!_verRecipiente && !_verAndarDeCima && !_verEscada && !_verCriatura)
+                if (!_verRecipiente && !_verAndarDeCima && !_verEscada && !_verCriatura && !_verArmario)
                     _inclinacao = -0.14f;   // olha um pouco para baixo: mostra chao e parede
                 _quadrosDeFoto++;
                 SincronizarCamera(dt);
@@ -1099,6 +1129,14 @@ namespace TurnoDaNoite.Jogo
                             if (predio.GetChild(i) is Node3D nd)
                                 GD.Print($"  peca {i}: {nd.Name} em {nd.GlobalPosition}, visivel={nd.Visible}");
                     GD.Print($"material parede: albedo={_matParede.AlbedoColor} textura={(_matParede.AlbedoTexture != null ? "sim" : "nao")}");
+                }
+                if (_quadrosDeFoto == 320 && _verArmario)
+                {
+                    var a0 = _partida.Armarios[0];
+                    GD.Print($"armario0 pos={a0.Pos} andar={a0.Andar} giro={a0.Giro:0.00}");
+                    GD.Print($"jogador pos={_partida.Jogador.Pos} andar={_partida.Jogador.Andar} escondido={_partida.Jogador.Escondido}");
+                    GD.Print($"camera={_camera.GlobalPosition} giro={_giro:0.00} frenteCam={-_camera.GlobalTransform.Basis.Z}");
+                    GD.Print($"armarios na cena={_armarios.Count} porta0={(_armarios.Count > 0 && _armarios[0].Porta != null)}");
                 }
                 if (_quadrosDeFoto == 150) TirarFoto("res://captura_1.png");
                 // depois da foto do menu, dispensa ele e fotografa o jogo
@@ -1153,7 +1191,24 @@ namespace TurnoDaNoite.Jogo
             // a altura do andar entra aqui: sem ela, subir a escada deixava a
             // câmera no térreo olhando para dentro da laje
             float pisoDoAndar = Predio.AlturaDoAndar(j.Andar);
-            _camera.Position = new Vector3(j.Pos.X, pisoDoAndar + j.AlturaOlho + sobe + tremor, j.Pos.Z);
+            var olho = new Vector3(j.Pos.X, pisoDoAndar + j.AlturaOlho + sobe + tremor, j.Pos.Z);
+
+            // Escondido, a câmera encosta ATRÁS DA PORTA, não no centro da
+            // caixa. No centro você ficava dentro da chapa do fundo e do
+            // corpo do móvel; encostado na porta você espia pelas venezianas,
+            // que é o que se faz dentro de um armário.
+            if (j.Escondido)
+            {
+                var arm = ArmarioMaisPerto(j);
+                if (arm != null)
+                {
+                    var frente = arm.Frente;
+                    olho = new Vector3(arm.Pos.X + frente.X * 0.09f,
+                                       Predio.AlturaDoAndar(arm.Andar) + j.AlturaOlho,
+                                       arm.Pos.Z + frente.Z * 0.09f);
+                }
+            }
+            _camera.Position = olho;
             _camera.Rotation = new Vector3(_inclinacao, _giro, Mathf.Cos(_balanco * 0.5f) * 0.006f);
             MostrarApenasOAndar(j.Andar);
 
@@ -1183,6 +1238,49 @@ namespace TurnoDaNoite.Jogo
             if (!_forcarLuz)
                 _lanterna.LightEnergy = EnergiaDaLanterna * Mathf.Clamp(j.Bateria * 3f, 0.25f, 1f);
             _camera.Fov = j.Correndo ? 80 : 74;
+        }
+
+        /// <summary>O armário em que o jogador está enfiado, ou null.</summary>
+        Armario ArmarioMaisPerto(Jogador j)
+        {
+            Armario melhor = null;
+            float md = 1.2f;
+            foreach (var a in _partida.Armarios)
+            {
+                if (a.Andar != j.Andar) continue;
+                float d = P2.Distancia(a.Pos, j.Pos);
+                if (d >= md) continue;
+                md = d; melhor = a;
+            }
+            return melhor;
+        }
+
+        /// <summary>
+        /// Abre a porta do armário em que você entrou, e fecha as outras.
+        /// A porta gira até quase encostada: escondido, o que se vê é a fresta
+        /// e as venezianas — porta escancarada não esconde ninguém.
+        /// </summary>
+        void SincronizarArmarios(float dt)
+        {
+            var j = _partida.Jogador;
+            var dentro = j.Escondido ? ArmarioMaisPerto(j) : null;
+
+            for (int i = 0; i < _armarios.Count; i++)
+            {
+                var no = _armarios[i];
+                if (no.Porta == null) continue;
+
+                bool esteAberto = dentro != null && i < _partida.Armarios.Count
+                                  && ReferenceEquals(_partida.Armarios[i], dentro);
+
+                float alvo = esteAberto ? 1f : 0f;
+                if (Mathf.IsEqualApprox(no.Abertura, alvo)) continue;
+
+                no.Abertura = Mathf.MoveToward(no.Abertura, alvo, dt * 3.2f);
+                // mal encostada, nao escancarada: a porta aberta nao esconde
+                // ninguem, e o que deixa voce ver e a grelha, nao o vao dela
+                no.Porta.Rotation = new Vector3(0, -no.Abertura * 0.13f, 0);
+            }
         }
 
         void SincronizarItens(float dt)

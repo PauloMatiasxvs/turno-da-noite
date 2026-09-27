@@ -42,6 +42,17 @@ namespace TurnoDaNoite.Core
     {
         public P2 Pos;
         public int Andar;
+
+        /// <summary>
+        /// Para onde a porta olha, em radianos. Sem isto todos os armários do
+        /// prédio ficavam virados para o mesmo lado — inclusive os encostados
+        /// na parede de costas, com a porta dentro do concreto. E, escondido
+        /// dentro de um deles, você olhava para a parede.
+        /// </summary>
+        public float Giro;
+
+        /// <summary>Direção da porta no plano. É para lá que a câmera olha quando você se esconde.</summary>
+        public P2 Frente => new P2(MathF.Sin(Giro), MathF.Cos(Giro));
     }
 
     public sealed class Jogador
@@ -66,7 +77,12 @@ namespace TurnoDaNoite.Core
         public bool TemMapa;
 
         public bool LuzAcesa => Lanterna && Bateria > 0f;
-        public float AlturaOlho => Escondido ? 0.95f
+        /// <summary>
+        /// Escondido a cabeca fica ALTA, na altura da grelha do armario.
+        /// Com 0,95 m voce encarava a chapa lisa de baixo da porta: a tela
+        /// inteira virava um borrao, sem nada que parecesse um armario.
+        /// </summary>
+        public float AlturaOlho => Escondido ? 1.45f
             : (Agachado ? Regras.AlturaOlhoAgachado : Regras.AlturaOlhoEmPe);
 
         public P2 Frente => new P2(-MathF.Sin(Giro), -MathF.Cos(Giro));
@@ -339,7 +355,14 @@ namespace TurnoDaNoite.Core
                     if (TemAlgoPerto(pos, s.Andar, Regras.EspacoEntreMoveis)) continue;
                     if (Predio.EscadaEm(celula) != null) continue;
 
-                    Armarios.Add(new Armario { Pos = pos, Andar = s.Andar });
+                    // a porta olha para DENTRO do cômodo, ou seja, ao contrário
+                    // da parede em que o armário está encostado
+                    Armarios.Add(new Armario
+                    {
+                        Pos = pos,
+                        Andar = s.Andar,
+                        Giro = MathF.Atan2(-normal.X, -normal.Z)
+                    });
                     postos++;
                 }
             }
@@ -572,11 +595,60 @@ namespace TurnoDaNoite.Core
             var escada = Predio.EscadaEm(c);
             if (escada == null) return;
 
-            Jogador.Andar = Predio.OutroAndar(escada, Jogador.Andar);
+            int destino = Predio.OutroAndar(escada, Jogador.Andar);
+
+            // Sai NO PATAMAR, não na própria célula da escada.
+            //
+            // Enquanto só o andar mudava, você chegava em cima parado no meio
+            // do lance, com os degraus atravessando o peito — e, como continuava
+            // pisando na escada, 0,8 s depois descia de novo. Ficava indo e
+            // voltando preso dentro da geometria, que foi exatamente o que
+            // apareceu na tela.
+            var saida = SaidaDaEscada(escada, destino);
+            if (saida == null) return;
+
+            Jogador.Andar = destino;
+            Jogador.Pos = saida.Value;
             _travaEscada = Regras.EsperaDaEscada;
             Eventos.Add(Evento.Escada);
             FazerBarulho(Regras.RuidoEscada);
             AnotarSala();
+        }
+
+        /// <summary>
+        /// Onde se desemboca ao sair da escada num andar: a célula vizinha
+        /// livre mais desimpedida. Devolve null se a escada não dá em lugar
+        /// nenhum naquele piso — e aí a subida não acontece, em vez de largar
+        /// o jogador dentro de uma parede.
+        /// </summary>
+        P2? SaidaDaEscada(Escada e, int andar)
+        {
+            Span<(int dx, int dz)> lados = stackalloc (int, int)[]
+                { (0, 1), (0, -1), (1, 0), (-1, 0) };
+
+            P2? melhor = null;
+            float maiorFolga = -1;
+
+            foreach (var (dx, dz) in lados)
+            {
+                var v = new Celula(e.Cx + dx, e.Cz + dz, andar);
+                if (Predio.EhParede(v)) continue;
+                if (Predio.EscadaEm(v) != null) continue;   // nunca cair noutra escada
+
+                var m = Predio.ParaMundo(v);
+                if (!Colisao.Livre(m, Regras.RaioJogador, Solidos, andar)) continue;
+
+                // prefere a vizinha com mais espaço em volta: sair num beco de
+                // uma célula só deixa você espremido contra a parede
+                float folga = 0;
+                foreach (var (ox, oz) in lados)
+                    if (!Predio.EhParede(new Celula(v.Cx + ox, v.Cz + oz, andar))) folga++;
+
+                if (folga <= maiorFolga) continue;
+                maiorFolga = folga;
+                melhor = m;
+            }
+            return melhor;
         }
 
         /// <summary>
