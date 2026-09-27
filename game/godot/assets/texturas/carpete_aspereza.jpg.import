@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://74op8vf3y6q3"
-path="res://.godot/imported/parede_aspereza.jpg-fd473ba65fd24c437adc25daca50aba7.ctex"
+uid="uid://bgxohmfdwtacx"
+path="res://.godot/imported/carpete_aspereza.jpg-2985edbc19963e0cfd940ee10d0c97df.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/texturas/parede_aspereza.jpg"
-dest_files=["res://.godot/imported/parede_aspereza.jpg-fd473ba65fd24c437adc25daca50aba7.ctex"]
+source_file="res://assets/texturas/carpete_aspereza.jpg"
+dest_files=["res://.godot/imported/carpete_aspereza.jpg-2985edbc19963e0cfd940ee10d0c97df.ctex"]
 
 [params]
 

@@ -187,7 +187,9 @@ namespace TurnoDaNoite.Jogo
                 Roughness = 0.5f
             };
 
-            _matParede = Texturizado("parede", new Color(0.55f, 0.53f, 0.50f), 0.28f)
+            // madeira em ripas verticais, como na referencia; escala menor para
+            // a ripa aparecer em vez de virar borrao
+            _matParede = Texturizado("parede", new Color(0.62f, 0.50f, 0.36f), 0.42f)
                          ?? Fosco(new Color(0.26f, 0.25f, 0.23f));
             _matPiso = Texturizado("piso", new Color(0.52f, 0.51f, 0.49f), 0.22f)
                        ?? Fosco(new Color(0.19f, 0.18f, 0.17f), 0.95f);
@@ -195,7 +197,7 @@ namespace TurnoDaNoite.Jogo
             // metal a um metro do nariz é a coisa que mais rápido entrega que
             // aquilo é uma maquete: sem grão, sem risco, sem ferrugem, a peça
             // vira plástico. Todas as texturas são CC0 do ambientCG.
-            _matTeto = Texturizado("teto", new Color(0.30f, 0.30f, 0.31f), 0.26f)
+            _matTeto = Texturizado("teto", new Color(0.52f, 0.52f, 0.50f), 0.38f)
                        ?? Fosco(new Color(0.13f, 0.13f, 0.14f));
             _matArmario = Texturizado("metal", new Color(0.38f, 0.41f, 0.44f), 1.3f)
                           ?? Fosco(new Color(0.22f, 0.24f, 0.26f), 0.6f);
@@ -212,7 +214,8 @@ namespace TurnoDaNoite.Jogo
             Modelos.Texturas(
                 metal: Texturizado("metal", new Color(0.30f, 0.32f, 0.35f), 2.2f),
                 madeira: Texturizado("madeira", new Color(0.42f, 0.32f, 0.22f), 1.6f),
-                ferrugem: Texturizado("ferrugem", new Color(0.46f, 0.30f, 0.22f), 2.0f));
+                ferrugem: Texturizado("ferrugem", new Color(0.46f, 0.30f, 0.22f), 2.0f),
+                pele: Texturizado("criatura", new Color(0.30f, 0.27f, 0.28f), 1.1f));
         }
 
         /// <summary>
@@ -227,10 +230,27 @@ namespace TurnoDaNoite.Jogo
         /// <summary>Desliga o mapa de normal, para testar se ele esta quebrando a luz.</summary>
         public static bool SemNormal;
 
+        /// <summary>
+        /// Acha o arquivo da textura, em .jpg ou .png.
+        ///
+        /// Aceita os dois porque quem gera textura fora do jogo costuma
+        /// entregar PNG, e exigir conversão só para soltar um arquivo na pasta
+        /// anulava a ideia do registro de assets.
+        /// </summary>
+        static string AcharTextura(string nome, string mapa)
+        {
+            foreach (string ext in new[] { ".png", ".jpg" })
+            {
+                string caminho = $"res://assets/texturas/{nome}_{mapa}{ext}";
+                if (ResourceLoader.Exists(caminho)) return caminho;
+            }
+            return null;
+        }
+
         static StandardMaterial3D Texturizado(string nome, Color tinta, float escala)
         {
-            string cor = $"res://assets/texturas/{nome}_cor.jpg";
-            if (!ResourceLoader.Exists(cor)) return null;
+            string cor = AcharTextura(nome, "cor");
+            if (cor == null) return null;
 
             var mat = new StandardMaterial3D
             {
@@ -242,16 +262,16 @@ namespace TurnoDaNoite.Jogo
                 Metallic = 0f
             };
 
-            string normal = "res://assets/texturas/" + nome + "_normal.jpg";
-            if (!SemNormal && ResourceLoader.Exists(normal))
+            string normal = AcharTextura(nome, "normal");
+            if (!SemNormal && normal != null)
             {
                 mat.NormalEnabled = true;
                 mat.NormalTexture = GD.Load<Texture2D>(normal);
                 mat.NormalScale = 1.2f;   // realça o relevo: no escuro é o que dá textura à parede
             }
 
-            string aspereza = $"res://assets/texturas/{nome}_aspereza.jpg";
-            if (ResourceLoader.Exists(aspereza))
+            string aspereza = AcharTextura(nome, "aspereza");
+            if (aspereza != null)
             {
                 mat.RoughnessTexture = GD.Load<Texture2D>(aspereza);
                 mat.RoughnessTextureChannel = BaseMaterial3D.TextureChannel.Red;
@@ -568,7 +588,7 @@ namespace TurnoDaNoite.Jogo
             const float alturaPainel = 1.10f;
             const float alturaRodape = 0.16f;
 
-            var painelMat = Texturizado("reboco", new Color(0.56f, 0.55f, 0.51f), 0.55f)
+            var painelMat = Texturizado("reboco", new Color(0.66f, 0.66f, 0.63f), 0.65f)
                             ?? new StandardMaterial3D
                             {
                                 AlbedoColor = new Color(0.30f, 0.29f, 0.27f), Roughness = 0.82f

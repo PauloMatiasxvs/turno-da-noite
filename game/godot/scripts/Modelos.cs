@@ -58,12 +58,17 @@ namespace TurnoDaNoite.Jogo
         /// </summary>
         public static void Texturas(StandardMaterial3D metal = null,
                                     StandardMaterial3D madeira = null,
-                                    StandardMaterial3D ferrugem = null)
+                                    StandardMaterial3D ferrugem = null,
+                                    StandardMaterial3D pele = null)
         {
             if (metal != null) _metalEscuro = metal;
             if (madeira != null) _madeira = madeira;
             if (ferrugem != null) _ferrugem = ferrugem;
+            if (pele != null) _peleDela = pele;
         }
+
+        /// <summary>Pele da criatura, se alguem entregar uma. Triplanar, porque ela nao tem UV.</summary>
+        static StandardMaterial3D _peleDela;
 
         static StandardMaterial3D _ferrugem;
         static StandardMaterial3D Ferrugem => _ferrugem ??= new StandardMaterial3D
@@ -849,7 +854,7 @@ namespace TurnoDaNoite.Jogo
 
             // proporções em fração da altura, para escalar junto
             float h = altura;
-            var pele = new StandardMaterial3D
+            var pele = _peleDela ?? new StandardMaterial3D
             {
                 AlbedoColor = new Color(0.055f, 0.050f, 0.058f),
                 Roughness = 0.97f,

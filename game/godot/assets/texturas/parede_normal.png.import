@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://clgusyk7q4ek8"
-path="res://.godot/imported/parede_normal.jpg-969d291113bd54f21d811997608cb339.ctex"
+uid="uid://dfgllcdeksvm6"
+path="res://.godot/imported/parede_normal.png-28c9d3493d81024dac7dece1dce4f04d.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/texturas/parede_normal.jpg"
-dest_files=["res://.godot/imported/parede_normal.jpg-969d291113bd54f21d811997608cb339.ctex"]
+source_file="res://assets/texturas/parede_normal.png"
+dest_files=["res://.godot/imported/parede_normal.png-28c9d3493d81024dac7dece1dce4f04d.ctex"]
 
 [params]
 

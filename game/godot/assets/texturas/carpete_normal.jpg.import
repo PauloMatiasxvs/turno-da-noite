@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://tx3mqys8u4cc"
-path="res://.godot/imported/parede_cor.jpg-56800c948ed3dab05c09cb82c40b8a58.ctex"
+uid="uid://qob6m3jokp7x"
+path="res://.godot/imported/carpete_normal.jpg-3a4aafbad08372d6c80f7c6c56dcd737.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://assets/texturas/parede_cor.jpg"
-dest_files=["res://.godot/imported/parede_cor.jpg-56800c948ed3dab05c09cb82c40b8a58.ctex"]
+source_file="res://assets/texturas/carpete_normal.jpg"
+dest_files=["res://.godot/imported/carpete_normal.jpg-3a4aafbad08372d6c80f7c6c56dcd737.ctex"]
 
 [params]
 
