@@ -134,3 +134,29 @@ godot --path game/godot -- --screenshot --semambiente # roda sem WorldEnvironmen
 Foi com esse conjunto que se achou o bug que deixava a tela preta: a combinação
 de tonemap ACES com `AdjustmentContrast`/`AdjustmentSaturation` ligados comia
 toda a luz da lanterna — a cena ficava preta mesmo com energia 500 no holofote.
+
+## Texturas instaladas (todas CC0, ambientCG)
+
+| Nome no jogo | Asset | Onde aparece |
+|---|---|---|
+| `parede` | Metal063 | paredes |
+| `piso` | Concrete034 | chão |
+| `teto` | Concrete048 | forro |
+| `metal` | MetalPlates006 | armários, porta da frente, peças de metal |
+| `madeira` | Planks037A | caixotes, bancadas |
+| `ferrugem` | Metal041B | tambores, quadro elétrico |
+| `reboco` | PaintedPlaster017 | reserva para variação de parede |
+
+Baixadas de ambientCG, que é **CC0**: uso comercial liberado, sem
+atribuição obrigatória. Para trocar qualquer uma, ponha três arquivos em
+`game/godot/assets/texturas/` com o mesmo nome e os sufixos `_cor.jpg`,
+`_normal.jpg` e `_aspereza.jpg` — nenhuma linha de código muda.
+
+### Sobre usar textura de jogo comercial
+
+Não dá, e o motivo é prático antes de ser legal: o objetivo declarado
+deste projeto é **poder vender**. Todo asset aqui é CC0 ou feito em
+código justamente para que ninguém precise pedir licença a ninguém.
+Textura extraída de um jogo pago é do estúdio que a fez; usá-la fecha a
+porta de vender, de publicar na Steam e de mostrar o repositório em
+público. É o único tipo de asset que este projeto recusa.

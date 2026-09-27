@@ -47,6 +47,30 @@ namespace TurnoDaNoite.Jogo
             EmissionEnergyMultiplier = forca, Roughness = 0.4f
         };
 
+        /// <summary>
+        /// Texturas PBR para as peças montadas aqui, entregues por quem monta a
+        /// cena (só ele sabe carregar arquivo do Godot).
+        ///
+        /// Enquanto tudo era cor chapada, um armário de metal a um metro do
+        /// nariz virava plástico: sem grão, sem risco, sem ferrugem, nada que
+        /// dissesse de que material aquilo é feito. Se vier null, as peças
+        /// continuam com as cores de antes e o jogo roda igual.
+        /// </summary>
+        public static void Texturas(StandardMaterial3D metal = null,
+                                    StandardMaterial3D madeira = null,
+                                    StandardMaterial3D ferrugem = null)
+        {
+            if (metal != null) _metalEscuro = metal;
+            if (madeira != null) _madeira = madeira;
+            if (ferrugem != null) _ferrugem = ferrugem;
+        }
+
+        static StandardMaterial3D _ferrugem;
+        static StandardMaterial3D Ferrugem => _ferrugem ??= new StandardMaterial3D
+        {
+            AlbedoColor = new Color(0.36f, 0.20f, 0.12f), Metallic = 0.35f, Roughness = 0.85f
+        };
+
         // ------------------------------------------------------------ auxiliares
 
         static MeshInstance3D Cilindro(float raio, float altura, Material mat, Vector3 pos, int lados = 14)
@@ -249,12 +273,7 @@ namespace TurnoDaNoite.Jogo
         {
             var raiz = new Node3D();
             float raio = t.X / 2, a = t.Y;
-            var ferrugem = new StandardMaterial3D
-            {
-                AlbedoColor = new Color(0.36f, 0.20f, 0.12f), Metallic = 0.35f, Roughness = 0.85f
-            };
-
-            raiz.AddChild(Cilindro(raio, a, ferrugem, new Vector3(0, a / 2, 0), 16));
+            raiz.AddChild(Cilindro(raio, a, Ferrugem, new Vector3(0, a / 2, 0), 16));
             raiz.AddChild(Cilindro(raio * 1.06f, 0.05f, MetalEscuro, new Vector3(0, a * 0.28f, 0), 16));
             raiz.AddChild(Cilindro(raio * 1.06f, 0.05f, MetalEscuro, new Vector3(0, a * 0.72f, 0), 16));
             raiz.AddChild(Cilindro(raio * 0.25f, 0.03f, Metal, new Vector3(raio * 0.4f, a + 0.01f, 0), 10));

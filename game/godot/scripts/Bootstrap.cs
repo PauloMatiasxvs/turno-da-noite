@@ -191,14 +191,28 @@ namespace TurnoDaNoite.Jogo
                          ?? Fosco(new Color(0.26f, 0.25f, 0.23f));
             _matPiso = Texturizado("piso", new Color(0.52f, 0.51f, 0.49f), 0.22f)
                        ?? Fosco(new Color(0.19f, 0.18f, 0.17f), 0.95f);
-            _matTeto = Fosco(new Color(0.13f, 0.13f, 0.14f));
-            _matArmario = Fosco(new Color(0.22f, 0.24f, 0.26f), 0.6f);
-            _matQuadro = Fosco(new Color(0.30f, 0.26f, 0.18f), 0.7f);
+            // Texturado sempre que houver arquivo. Cor chapada num armário de
+            // metal a um metro do nariz é a coisa que mais rápido entrega que
+            // aquilo é uma maquete: sem grão, sem risco, sem ferrugem, a peça
+            // vira plástico. Todas as texturas são CC0 do ambientCG.
+            _matTeto = Texturizado("teto", new Color(0.30f, 0.30f, 0.31f), 0.26f)
+                       ?? Fosco(new Color(0.13f, 0.13f, 0.14f));
+            _matArmario = Texturizado("metal", new Color(0.38f, 0.41f, 0.44f), 1.3f)
+                          ?? Fosco(new Color(0.22f, 0.24f, 0.26f), 0.6f);
+            _matQuadro = Texturizado("ferrugem", new Color(0.52f, 0.45f, 0.34f), 1.7f)
+                         ?? Fosco(new Color(0.30f, 0.26f, 0.18f), 0.7f);
             _matCriatura = Fosco(new Color(0.045f, 0.04f, 0.05f), 1f);
             _matFusivel = Brilho(new Color(1f, 0.72f, 0.20f), 1.8f);
             _matBateria = Brilho(new Color(0.35f, 0.9f, 0.55f), 1.4f);
-            _matPortao = Fosco(new Color(0.24f, 0.11f, 0.11f), 0.8f);
+            _matPortao = Texturizado("metal", new Color(0.34f, 0.20f, 0.18f), 1.1f)
+                         ?? Fosco(new Color(0.24f, 0.11f, 0.11f), 0.8f);
             _matMapa = Brilho(new Color(0.86f, 0.78f, 0.55f), 0.7f);
+
+            // as texturas que os móveis montados em código usam
+            Modelos.Texturas(
+                metal: Texturizado("metal", new Color(0.30f, 0.32f, 0.35f), 2.2f),
+                madeira: Texturizado("madeira", new Color(0.42f, 0.32f, 0.22f), 1.6f),
+                ferrugem: Texturizado("ferrugem", new Color(0.46f, 0.30f, 0.22f), 2.0f));
         }
 
         /// <summary>
@@ -492,6 +506,8 @@ namespace TurnoDaNoite.Jogo
                 raiz.AddChild(parede);
             }
 
+            MontarAcabamentoDasParedes(raiz, andar);
+
             // luminárias mortas por sala; uma em cada quatro ainda pisca
             int n = 0;
             foreach (var sala in predio.Salas)
@@ -518,6 +534,68 @@ namespace TurnoDaNoite.Jogo
                     raiz.AddChild(luz);
                 }
             }
+        }
+
+        /// <summary>
+        /// Rodapé e meia-parede nas faces de parede voltadas para o cômodo.
+        ///
+        /// É a diferença entre um corredor de concreto e o corredor de um
+        /// prédio. Parede lisa do chão ao teto não existe em lugar nenhum: há
+        /// sempre rodapé embaixo, e quase sempre um friso na altura do peito
+        /// separando dois acabamentos. Custa duas caixas por face e é o que
+        /// mais rápido faz o lugar parecer construído por alguém.
+        /// </summary>
+        void MontarAcabamentoDasParedes(Node3D raiz, int andar)
+        {
+            var predio = _partida.Predio;
+            float meio = Predio.Celula / 2f;
+
+            var rodapeMat = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.115f, 0.112f, 0.105f), Roughness = 0.85f
+            };
+            var frisoMat = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.165f, 0.160f, 0.148f), Roughness = 0.80f
+            };
+
+            for (int cz = 1; cz < predio.Profundidade - 1; cz++)
+                for (int cx = 1; cx < predio.Largura - 1; cx++)
+                {
+                    if (!predio.EhParede(cx, cz, andar)) continue;
+
+                    // uma face para cada vizinho que é chão: é a face que se vê
+                    foreach (var (dx, dz) in new[] { (1, 0), (-1, 0), (0, 1), (0, -1) })
+                    {
+                        if (predio.EhParede(cx + dx, cz + dz, andar)) continue;
+
+                        var m = predio.ParaMundo(new Celula(cx, cz, andar));
+                        float px = m.X + dx * (meio + 0.02f);
+                        float pz = m.Z + dz * (meio + 0.02f);
+
+                        var tamanho = dx != 0
+                            ? new Vector3(0.05f, 1f, Predio.Celula)
+                            : new Vector3(Predio.Celula, 1f, 0.05f);
+
+                        var rodape = new MeshInstance3D
+                        {
+                            Mesh = new BoxMesh { Size = new Vector3(tamanho.X, 0.14f, tamanho.Z) },
+                            MaterialOverride = rodapeMat,
+                            Position = new Vector3(px, 0.07f, pz),
+                            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
+                        };
+                        raiz.AddChild(rodape);
+
+                        var friso = new MeshInstance3D
+                        {
+                            Mesh = new BoxMesh { Size = new Vector3(tamanho.X, 0.07f, tamanho.Z) },
+                            MaterialOverride = frisoMat,
+                            Position = new Vector3(px, 1.12f, pz),
+                            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
+                        };
+                        raiz.AddChild(friso);
+                    }
+                }
         }
 
         /// <summary>
