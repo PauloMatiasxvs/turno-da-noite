@@ -564,43 +564,28 @@ namespace TurnoDaNoite.Jogo
             return raiz;
         }
 
-        // ------------------------------------------------------------ a mão
+        // ------------------------------------------------------- a lanterna
 
         /// <summary>
-        /// A mão segurando a lanterna, em primeira pessoa.
+        /// A lanterna sozinha, sem mão nenhuma: tubo, pega emborrachada com
+        /// anéis, cabeça cônica, aro e vidro.
         ///
-        /// É a única peça que fica na tela o tempo todo, então é a que mais
-        /// paga atenção ao detalhe. Já passou por duas versões ruins:
+        /// Ficou separada da mão quando entrou um modelo de braços com
+        /// esqueleto: lá a lanterna é pendurada no osso `hand_R` e o modelo
+        /// fecha os dedos em volta dela. Aqui ela continua servindo à mão
+        /// montada em código, que é o que aparece se o arquivo do modelo
+        /// sumir da pasta.
         ///
-        /// 1. Dois cilindros lisos — o braço lia como um cano escuro
-        ///    atravessando o canto do quadro.
-        /// 2. Tudo da mesma cor e iluminado só pela luz ambiente, que é
-        ///    azulada e não vem de lugar nenhum. Sem uma fonte batendo nela,
-        ///    a mão não tinha forma: saía um borrão lilás chapado, em que não
-        ///    dava para separar dedo de cano nem de manga.
-        ///
-        /// Desta vez: materiais diferentes para luva, borracha, alumínio e
-        /// manga; dedos com duas falanges cada, em vez de argolas no tubo; e
-        /// uma luz fraca na cabeça da lanterna, que é o que acontece de
-        /// verdade quando se segura uma lanterna acesa.
+        /// Ela aponta para −Z, com a pega na origem: é a convenção que o
+        /// resto do jogo assume ao encaixar a peça em qualquer lugar.
         ///
         /// O nó "Vidro" sai nomeado porque quem chama acende ele junto com a
-        /// lanterna. A luz que dá forma à mão NÃO mora aqui: é uma luz de
-        /// preenchimento presa à câmera, em Bootstrap, que enxerga só a mão.
-        /// Tentei uma luz pontual na cabeça da lanterna e o resultado foi pior:
-        /// a cinco centímetros dos dedos, qualquer energia estoura, e eles
-        /// viravam cunhas brancas saltando do cano.
+        /// luz — é o único pedaço que muda quando a lanterna liga.
         /// </summary>
-        public static Node3D MaoComLanterna()
+        public static Node3D Lanterna()
         {
-            var raiz = new Node3D();
+            var raiz = new Node3D { Name = "Lanterna" };
 
-            // ---- materiais
-            //
-            // Texturados quando houver arquivo. Enquanto o predio inteiro
-            // ganhou textura e a mao ficou em cor chapada, ela virou a unica
-            // coisa lisa na tela — e era POR ISSO que destoava, mais do que
-            // pela forma.
             var aluminio = _metalDaMao ?? new StandardMaterial3D
             {
                 AlbedoColor = new Color(0.115f, 0.120f, 0.130f),
@@ -609,20 +594,6 @@ namespace TurnoDaNoite.Jogo
             var borracha = new StandardMaterial3D
             {
                 AlbedoColor = new Color(0.045f, 0.045f, 0.050f), Roughness = 0.93f
-            };
-            var luva = _couroDaMao ?? new StandardMaterial3D
-            {
-                // couro escuro puxado para o quente: a luva cinza-azulada
-                // sumia dentro da luz ambiente, que também é azulada
-                AlbedoColor = new Color(0.105f, 0.082f, 0.068f), Roughness = 0.88f
-            };
-            var luvaVinco = new StandardMaterial3D
-            {
-                AlbedoColor = new Color(0.062f, 0.048f, 0.040f), Roughness = 0.92f
-            };
-            var manga = new StandardMaterial3D
-            {
-                AlbedoColor = new Color(0.068f, 0.070f, 0.066f), Roughness = 0.96f
             };
 
             // ---- a lanterna, em peças distintas
@@ -674,6 +645,61 @@ namespace TurnoDaNoite.Jogo
             };
             vidro.RotateX(Mathf.Pi / 2);
             raiz.AddChild(vidro);
+
+            return raiz;
+        }
+
+        // ------------------------------------------------------------ a mão
+
+        /// <summary>
+        /// A mão segurando a lanterna, em primeira pessoa.
+        ///
+        /// É a única peça que fica na tela o tempo todo, então é a que mais
+        /// paga atenção ao detalhe. Já passou por duas versões ruins:
+        ///
+        /// 1. Dois cilindros lisos — o braço lia como um cano escuro
+        ///    atravessando o canto do quadro.
+        /// 2. Tudo da mesma cor e iluminado só pela luz ambiente, que é
+        ///    azulada e não vem de lugar nenhum. Sem uma fonte batendo nela,
+        ///    a mão não tinha forma: saía um borrão lilás chapado, em que não
+        ///    dava para separar dedo de cano nem de manga.
+        ///
+        /// Desta vez: materiais diferentes para luva, borracha, alumínio e
+        /// manga; dedos com duas falanges cada, em vez de argolas no tubo; e
+        /// uma luz fraca na cabeça da lanterna, que é o que acontece de
+        /// verdade quando se segura uma lanterna acesa.
+        ///
+        /// O nó "Vidro" sai nomeado porque quem chama acende ele junto com a
+        /// lanterna. A luz que dá forma à mão NÃO mora aqui: é uma luz de
+        /// preenchimento presa à câmera, em Bootstrap, que enxerga só a mão.
+        /// Tentei uma luz pontual na cabeça da lanterna e o resultado foi pior:
+        /// a cinco centímetros dos dedos, qualquer energia estoura, e eles
+        /// viravam cunhas brancas saltando do cano.
+        /// </summary>
+        public static Node3D MaoComLanterna()
+        {
+            var raiz = Lanterna();
+
+            // ---- materiais
+            //
+            // Texturados quando houver arquivo. Enquanto o predio inteiro
+            // ganhou textura e a mao ficou em cor chapada, ela virou a unica
+            // coisa lisa na tela — e era POR ISSO que destoava, mais do que
+            // pela forma.
+            var luva = _couroDaMao ?? new StandardMaterial3D
+            {
+                // couro escuro puxado para o quente: a luva cinza-azulada
+                // sumia dentro da luz ambiente, que também é azulada
+                AlbedoColor = new Color(0.105f, 0.082f, 0.068f), Roughness = 0.88f
+            };
+            var luvaVinco = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.062f, 0.048f, 0.040f), Roughness = 0.92f
+            };
+            var manga = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.068f, 0.070f, 0.066f), Roughness = 0.96f
+            };
 
             // ---- a mão: dorso, quatro dedos de duas falanges, polegar
             var dorso = Caixa(new Vector3(0.028f, 0.062f, 0.098f), luva,

@@ -639,6 +639,7 @@ namespace TurnoDaNoite.Core
                 Jogador.Pos += mov.Normalizado * (vel * dt);
                 Jogador.Pos = Predio.EmpurrarFora(Jogador.Pos, Regras.RaioJogador, Jogador.Andar);
                 Jogador.Pos = Colisao.Empurrar(Jogador.Pos, Regras.RaioJogador, Solidos, Jogador.Andar);
+                Jogador.Pos = EmpurrarDoPortao(Jogador.Pos);
                 // a parede tem a última palavra: móvel encostado nela não pode
                 // ser a coisa que te empurra para dentro do concreto
                 Jogador.Pos = Predio.EmpurrarFora(Jogador.Pos, Regras.RaioJogador, Jogador.Andar);
@@ -807,6 +808,25 @@ namespace TurnoDaNoite.Core
         /// </summary>
         public static float DistanciaReal(P2 a, int andarA, P2 b, int andarB) =>
             andarA == andarB ? P2.Distancia(a, b) : 1e6f;
+
+        /// <summary>
+        /// A porta da frente empurra quando está FECHADA, e some quando abre.
+        ///
+        /// Não entra na lista de sólidos porque aquela é montada uma vez e o
+        /// portão muda de estado durante a partida: fechado quando o primeiro
+        /// fusível sai do lugar, aberto de novo quando a energia volta.
+        ///
+        /// Sem isto o jogo dizia "trancada — falta energia" e deixava você
+        /// atravessar a folha mesmo assim. Mensagem que o corpo desmente é pior
+        /// do que mensagem nenhuma.
+        /// </summary>
+        P2 EmpurrarDoPortao(P2 p)
+        {
+            if (PortaoAberto || Jogador.Andar != 0) return p;
+
+            var um = new List<Solido> { new Solido(Portao, 0, Regras.RaioDoPortao) };
+            return Colisao.Empurrar(p, Regras.RaioJogador, um, 0);
+        }
 
         void GastarBateria(float dt)
         {

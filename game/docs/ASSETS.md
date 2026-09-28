@@ -135,22 +135,27 @@ Foi com esse conjunto que se achou o bug que deixava a tela preta: a combinaçã
 de tonemap ACES com `AdjustmentContrast`/`AdjustmentSaturation` ligados comia
 toda a luz da lanterna — a cena ficava preta mesmo com energia 500 no holofote.
 
-## Texturas instaladas (todas CC0, ambientCG)
+## Texturas instaladas
 
-| Nome no jogo | Asset | Onde aparece |
+| Nome no jogo | De onde veio | Onde aparece |
 |---|---|---|
-| `parede` | Metal063 | paredes |
-| `piso` | Concrete034 | chão |
-| `teto` | Concrete048 | forro |
-| `metal` | MetalPlates006 | armários, porta da frente, peças de metal |
-| `madeira` | Planks037A | caixotes, bancadas |
-| `ferrugem` | Metal041B | tambores, quadro elétrico |
-| `reboco` | PaintedPlaster017 | reserva para variação de parede |
+| `parede` | **sua** (lambri de nogueira) | paredes dos cômodos |
+| `piso` | **sua** (carpete) | chão |
+| `criatura` | **sua** (pele) | reserva para a criatura |
+| `carpete` | ambientCG (CC0) | chão, variante |
+| `teto` | ambientCG — OfficeCeiling001 | forro |
+| `reboco` | ambientCG — PaintedPlaster017 | lambril e frisos |
+| `metal` | ambientCG (CC0) | armários, porta da frente, lanterna |
+| `madeira` | ambientCG — Planks037A | caixotes, bancadas |
+| `ferrugem` | ambientCG — Metal041B | tambores, quadro elétrico |
+| `couro` | ambientCG — Leather037 | luva da mão montada em código |
 
-Baixadas de ambientCG, que é **CC0**: uso comercial liberado, sem
-atribuição obrigatória. Para trocar qualquer uma, ponha três arquivos em
-`game/godot/assets/texturas/` com o mesmo nome e os sufixos `_cor.jpg`,
-`_normal.jpg` e `_aspereza.jpg` — nenhuma linha de código muda.
+Para trocar qualquer uma, ponha três arquivos em
+`game/godot/assets/texturas/` com o mesmo nome e os sufixos `_cor`, `_normal` e
+`_aspereza` (`.jpg` ou `.png`) — nenhuma linha de código muda.
+
+Tudo que veio da ambientCG é **CC0**: uso comercial liberado, sem atribuição
+obrigatória.
 
 ### Sobre usar textura de jogo comercial
 
@@ -163,11 +168,31 @@ público. É o único tipo de asset que este projeto recusa.
 
 ## Braços em primeira pessoa (`mao_com_lanterna`)
 
-A mão é montada em código. Para trocar por um modelo de verdade, ponha um
-arquivo `mao_com_lanterna.glb` em `assets/modelos/` — o registro em
-`Props.cs` prefere o arquivo e nada de código muda.
+**Já está instalado**: `mao_com_lanterna.glb`, modelo seu, dois braços com
+esqueleto de 37 ossos, pele pintada nas cores de vértice.
 
-Onde achar, com licença que permite vender:
+O que o código faz com ele, porque o arquivo não traz pronto:
+
+- **empurra o conjunto para a frente**, porque o modelo tem geometria de braço
+  até 22 cm ATRÁS da câmera, e o que fica atrás do plano de corte aparece
+  fatiado, pelo avesso;
+- **fecha os dedos**, osso por osso. As quatro animações que vieram no arquivo
+  (`idle`, `grab`, `punch`, `fist_guard`) mexem o pulso um grau e meio e mais
+  nada — as pistas dos dedos têm todas o mesmo valor do começo ao fim;
+- **liga `VertexColorUseAsAlbedo`**, senão as duas mãos saem brancas chapadas;
+- **pendura a lanterna no osso `hand_R`**, calculando a posição no meio dos
+  quatro dedos dobrados — assim mexer no cotovelo não deixa a lanterna para trás.
+
+Os números de pose ficam todos juntos em `Bootstrap.cs`, logo abaixo de
+`MontarBracos`. Para trocar por outro modelo, basta que ele:
+
+- olhe para **−Z** com a origem no **olho** (não no punho);
+- tenha os ossos com os nomes `hand_R`, `index1_R`…`pinky3_R`, `thumb1_R`…,
+  e os mesmos com `_L`. É a nomenclatura do Mixamo sem o prefixo.
+
+Sem arquivo nenhum, o jogo monta uma mão em código e continua rodando.
+
+### Onde achar outros, com licença que permite vender
 
 - **Mixamo** (Adobe, grátis, uso comercial liberado): personagens com rig.
   Baixe um, abra no Blender e exporte só os braços.
@@ -175,5 +200,23 @@ Onde achar, com licença que permite vender:
   procure "fps arms". CC-BY exige crédito num arquivo de créditos.
 - **Quaternius** e **Kenney**: CC0, mas não têm braços em primeira pessoa.
 
-O modelo precisa olhar para **−Z** e ter a origem no punho. Se vier virado,
-`GiroDoModelo` em `Bootstrap.cs` resolve.
+## GLB gordo: `tools/limpar-glb.py`
+
+Exportador baseado em three.js grava uma cópia inteira da geometria em JSON no
+campo `extras` do nó raiz — os mesmos vértices que já estão no bloco binário,
+de novo, em texto. Nos dois modelos que chegaram aqui era 85% do arquivo:
+
+    criatura.glb   23,5 MB  ->  5,2 MB
+    maos_fps.glb   21,5 MB  ->  4,6 MB
+
+```bash
+python tools/limpar-glb.py entrada.glb [saida.glb]
+```
+
+O Godot ignora `extras`, então nada se perde. Rode nisso todo `.glb` que vier
+de gerador online antes de pôr na pasta.
+
+## A tabela dos itens
+
+Quantos fusíveis, quantos armários, o que cada móvel faz e qual arquivo desenha
+cada coisa: [ITENS.md](ITENS.md).

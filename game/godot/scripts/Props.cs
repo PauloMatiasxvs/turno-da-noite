@@ -118,6 +118,22 @@ namespace TurnoDaNoite.Jogo
             return recipiente;
         }
 
+        /// <summary>
+        /// O modelo importado, do jeito que o artista salvou: sem redimensionar,
+        /// sem apoiar no chão, com esqueleto e animações intactos. Devolve
+        /// <c>null</c> quando não há arquivo — quem chama decide o que fazer.
+        ///
+        /// Existe por causa dos braços em primeira pessoa. Um viewmodel já vem
+        /// posicionado em relação ao olho: a origem é a câmera, as mãos estão
+        /// onde as mãos ficam. Encaixar ele numa caixa, como se faz com um
+        /// caixote, jogaria fora exatamente a informação que o artista pôs lá.
+        /// </summary>
+        public static Node3D CriarSemAjuste(Peca peca)
+        {
+            var cena = Carregar(peca);
+            return cena?.Instantiate<Node3D>();
+        }
+
         public static Node3D Criar(Peca peca, Vector3 tamanho, Material fallback)
         {
             // O visual vai SEMPRE dentro de um nó pai vazio. Sem esse invólucro,

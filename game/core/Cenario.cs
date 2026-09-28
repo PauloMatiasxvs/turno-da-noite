@@ -52,7 +52,9 @@ namespace TurnoDaNoite.Core
             (TipoAdorno.Barril, 0.38f),
             (TipoAdorno.Bancada, 0.44f),
             (TipoAdorno.Pilha, 0.40f),
-            (TipoAdorno.CanoParede, 0f),
+            // o cano de parede vai do chao ao teto: raio zero fazia voce
+            // atravessar um tubo que a tela mostra inteiro
+            (TipoAdorno.CanoParede, 0.12f),
             (TipoAdorno.Entulho, 0f)
         };
 

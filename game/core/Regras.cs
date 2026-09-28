@@ -164,6 +164,12 @@ namespace TurnoDaNoite.Core
         /// <summary>Montantes do lance de escada. O meio fica livre: pisar nele é o que troca de andar.</summary>
         public const float MeioLanceDaEscada = 0.93f;
         public const float RaioDoMontante = 0.24f;
+
+        /// <summary>
+        /// A folha da porta da frente, quando fechada. Larga: e uma porta de
+        /// 2,4 m que tem de VEDAR o vao, e nao so atrapalhar a passagem.
+        /// </summary>
+        public const float RaioDoPortao = 1.45f;
         /// <summary>Altura dela, em metros. Mais alta que gente, e é para ser.</summary>
         public const float AlturaDaCriatura = 2.35f;
 

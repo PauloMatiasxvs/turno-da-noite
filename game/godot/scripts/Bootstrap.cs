@@ -21,6 +21,11 @@ namespace TurnoDaNoite.Jogo
         Node3D _raizItens, _raizArmarios;
         Node3D _criatura;
         Node3D _mao;
+        /// <summary>Onde a mão descansa na frente da câmera. Muda conforme ela seja o modelo importado ou a de código.</summary>
+        Vector3 _poseDaMao = new Vector3(0.185f, -0.215f, -0.60f);
+        /// <summary>Inclinação de descanso da mão, em graus. O balanço do passo soma em cima disto.</summary>
+        Vector3 _giroDaMao = Vector3.Zero;
+        Skeleton3D _ossosDasMaos;
         MeshInstance3D _vidroDaLanterna;
         DirectionalLight3D _luzDaMao;
         StandardMaterial3D _matVidro;
@@ -424,22 +429,13 @@ namespace TurnoDaNoite.Jogo
         {
             _mao = new Node3D { Name = "MaoComLanterna" };
             _camera.AddChild(_mao);
-            // mais longe e mais para dentro do que estava: a 46 cm a manga tomava
-            // o canto inferior direito inteiro, e encostada na borda a mao saia
-            // cortada pela metade
-            // mais para baixo e para o canto: o que precisa aparecer e a
-            // lanterna e um pedaco da luva, nao o antebraco inteiro
-            _mao.Position = new Vector3(0.185f, -0.215f, -0.60f);
 
-            // A mão inteira é uma peça só, montada em Modelos: dedos em volta do
-            // tubo, cabeça cônica e manga. Antes eram dois cilindros soltos, e
-            // o braço lia como um cano escuro atravessando o canto da tela.
-            var mao = Modelos.MaoComLanterna();
-            mao.Name = "Lanterna";
-            _mao.AddChild(mao);
+            var bracos = Props.CriarSemAjuste(Peca.Mao);
+            if (bracos != null) MontarBracos(bracos);
+            else MontarMaoDeCodigo();
 
-            // vidro da frente: acende junto com a luz e some quando ela apaga
-            _vidroDaLanterna = mao.GetNode<MeshInstance3D>("Vidro");
+            _mao.Position = _poseDaMao;
+            _mao.RotationDegrees = _giroDaMao;
 
             _matVidro = new StandardMaterial3D
             {
@@ -463,6 +459,277 @@ namespace TurnoDaNoite.Jogo
                 }
 
             CriarLuzDaMao();
+        }
+
+        /// <summary>
+        /// A mão montada em código, que é o que aparece quando não há arquivo
+        /// de modelo na pasta. Fica no canto: o que precisa estar em quadro é a
+        /// lanterna e um pedaço da luva, não o antebraço inteiro.
+        /// </summary>
+        void MontarMaoDeCodigo()
+        {
+            _poseDaMao = new Vector3(0.185f, -0.215f, -0.60f);
+            var mao = Modelos.MaoComLanterna();
+            mao.Name = "Lanterna";
+            _mao.AddChild(mao);
+            _vidroDaLanterna = mao.GetNode<MeshInstance3D>("Vidro");
+        }
+
+        /// <summary>
+        /// Os braços de verdade: modelo com esqueleto, duas mãos, unhas.
+        ///
+        /// Três coisas precisam acontecer aqui, e nenhuma delas o arquivo traz
+        /// pronta:
+        ///
+        /// 1. **Tirar o cotovelo de trás da câmera.** O modelo nasce com a
+        ///    origem no olho e os braços indo até 22 cm ATRÁS dele. O que fica
+        ///    atrás do plano de corte não some: aparece fatiado, mostrando o
+        ///    avesso do tubo do braço. Por isso o conjunto inteiro é empurrado
+        ///    para a frente, até o toco do braço passar do plano — lá embaixo,
+        ///    fora de quadro.
+        ///
+        /// 2. **Fechar a mão.** As quatro animações que vieram no arquivo
+        ///    (idle, grab, punch, fist_guard) mexem o PULSO um grau e meio e
+        ///    mais nada: as pistas dos dedos têm todas o mesmo valor do começo
+        ///    ao fim. Ou seja, o rig existe mas ninguém posou ele. Os dedos são
+        ///    dobrados aqui, osso por osso.
+        ///
+        /// 3. **Pôr a lanterna DENTRO da mão.** Ela é pendurada no osso
+        ///    `hand_R`, então segue o punho em qualquer pose ou balanço, sem
+        ///    ninguém sincronizar nada.
+        /// </summary>
+        void MontarBracos(Node3D bracos)
+        {
+            _poseDaMao = PoseDosBracos;
+            _giroDaMao = GiroDosBracos;
+            _mao.Scale = new Vector3(EscalaDosBracos, EscalaDosBracos, EscalaDosBracos);
+            _mao.AddChild(bracos);
+
+            VestirMaos(bracos);
+
+            var esqueleto = PrimeiroDoTipo<Skeleton3D>(bracos);
+            _ossosDasMaos = esqueleto;
+            if (esqueleto == null)
+            {
+                // modelo sem rig: ainda dá para mostrar as mãos, só não dá para
+                // fechar a garra — a lanterna vai presa à raiz mesmo
+                var solta = Modelos.Lanterna();
+                solta.Position = PoseDaLanterna;
+                solta.RotationDegrees = GiroDaLanterna;
+                bracos.AddChild(solta);
+                _vidroDaLanterna = solta.GetNode<MeshInstance3D>("Vidro");
+                return;
+            }
+
+            FecharAMao(esqueleto, "_R", CurvaDaGarra, CurvaDoPolegarNaGarra, GiroDoPunho);
+            // a esquerda fica solta, só não esticada: dedo reto e imóvel é a
+            // coisa que mais denuncia manequim
+            FecharAMao(esqueleto, "_L", CurvaDaMaoLivre, CurvaDoPolegarLivre, GiroDoPunhoLivre);
+
+            // os braços. O modelo vem com os dois estendidos para a frente, na
+            // mesma altura, feito quem pede esmola: quem carrega uma lanterna
+            // sobe a direita e deixa a esquerda cair.
+            Girar(esqueleto, "upperarm_R", GiroDoBracoDireito);
+            Girar(esqueleto, "forearm_R", GiroDoAntebracoDireito);
+            Girar(esqueleto, "upperarm_L", GiroDoBracoEsquerdo);
+            Girar(esqueleto, "forearm_L", GiroDoAntebracoEsquerdo);
+
+            var preso = new BoneAttachment3D { Name = "PunhoDireito", BoneName = "hand_R" };
+            esqueleto.AddChild(preso);
+
+            var lanterna = Modelos.Lanterna();
+            preso.AddChild(lanterna);
+            lanterna.Transform = EncaixarNaGarra(esqueleto);
+            _vidroDaLanterna = lanterna.GetNode<MeshInstance3D>("Vidro");
+        }
+
+        /// <summary>
+        /// Põe a lanterna dentro do punho fechado, apontada para onde a câmera
+        /// olha, seja qual for a pose do braço.
+        ///
+        /// Calcular em vez de acertar no olho é o que torna as poses acima
+        /// livres: mexer no cotovelo deixaria a lanterna para trás se o lugar
+        /// dela fosse um número fixo. Aqui ela vai no MEIO dos quatro dedos —
+        /// que é onde o buraco do punho está, por definição — e mira desfazendo
+        /// a inclinação do conjunto, porque o facho sai da câmera e tem de
+        /// combinar com o que ela ilumina.
+        /// </summary>
+        Transform3D EncaixarNaGarra(Skeleton3D esqueleto)
+        {
+            var centro = Vector3.Zero;
+            int quantos = 0;
+            foreach (string dedo in new[] { "index", "middle", "ring", "pinky" })
+            {
+                int osso = esqueleto.FindBone(dedo + "2_R");
+                if (osso < 0) continue;
+                centro += esqueleto.GetBoneGlobalPose(osso).Origin;
+                quantos++;
+            }
+            if (quantos > 0) centro /= quantos;
+
+            var mira = (Basis.FromEuler(_giroDaMao * (Mathf.Pi / 180f)).Inverse()
+                      * Basis.FromEuler(DesvioDoFacho * (Mathf.Pi / 180f))
+                      * new Vector3(0, 0, -1)).Normalized();
+
+            // a pega fica ATRÁS da origem do modelo da lanterna, então a origem
+            // anda para a frente do punho na mesma medida
+            var alvo = new Transform3D(
+                Basis.LookingAt(mira, Vector3.Up).Scaled(Vector3.One * EscalaDaLanterna),
+                centro + mira * (RecuoDaPega * EscalaDaLanterna));
+            int punho = esqueleto.FindBone("hand_R");
+            return punho < 0 ? alvo : esqueleto.GetBoneGlobalPose(punho).AffineInverse() * alvo;
+        }
+
+        // ---- como os braços ficam na tela. Tudo aqui foi acertado no olho,
+        // ---- comparando capturas: são os números que o modelo não traz.
+
+        /// <summary>
+        /// Empurrão para a frente. Não é enquadramento, é necessidade: o modelo
+        /// tem geometria de braço atrás da câmera, e sem isto ela aparece
+        /// cortada pelo plano de corte, pelo avesso.
+        /// </summary>
+        static readonly Vector3 PoseDosBracos = new Vector3(0.10f, -0.05f, -0.34f);
+        /// <summary>Inclina os dois para baixo: o modelo vem com os braços na horizontal, e mão na altura do olho lê como zumbi.</summary>
+        static readonly Vector3 GiroDosBracos = new Vector3(-18f, 0f, 0f);
+        const float EscalaDosBracos = 1f;
+
+        /// <summary>
+        /// Giro do punho direito. Os noventa graus em Y são o que transforma
+        /// "mão espalmada para baixo" em "mão fechada em volta de um cano
+        /// apontado para a frente": o túnel que os dedos dobrados formam corre
+        /// no eixo X do osso, então é o X que tem de virar para onde o facho vai.
+        /// </summary>
+        /// Sessenta e não noventa porque a pele paga o preço: o pulso é um osso
+        /// só, sem osso de torção, e a guinada inteira amassava o dorso da mão
+        /// num nó. O túnel do punho deixa de apontar exatamente para a frente,
+        /// e não faz falta: quem mira a lanterna é EncaixarNaGarra, não o dedo.
+        static readonly Vector3 GiroDoPunho = new Vector3(0f, 60f, 0f);
+        static readonly Vector3 GiroDoPunhoLivre = new Vector3(-10f, 0f, 0f);
+
+        /// <summary>Quanto cada falange dobra, em graus. Negativo é para dentro da palma.</summary>
+        static readonly float[] CurvaDaGarra = { -52f, -68f, -46f };
+        static readonly float[] CurvaDaMaoLivre = { -26f, -34f, -22f };
+        const float CurvaDoPolegarNaGarra = -34f;
+        const float CurvaDoPolegarLivre = -14f;
+
+        /// <summary>
+        /// Onde a lanterna fica, no espaço do osso `hand_R`. O X positivo vira
+        /// a frente depois do giro do punho, então o 0,04 é o que põe a pega
+        /// dentro da mão e deixa a cabeça 23 cm adiante dela.
+        /// </summary>
+        static readonly Vector3 PoseDaLanterna = new Vector3(0.040f, 0.005f, -0.095f);
+        static readonly Vector3 GiroDaLanterna = new Vector3(0f, -90f, 0f);
+
+        /// <summary>Ombro e cotovelo de cada lado. É o que tira os dois braços da mesma altura.</summary>
+        static readonly Vector3 GiroDoBracoDireito = new Vector3(16f, -14f, 0f);
+        static readonly Vector3 GiroDoAntebracoDireito = new Vector3(12f, 0f, 0f);
+        // a esquerda cai para fora do quadro: mão que não faz nada e aparece
+        // pela metade na borda de baixo lê como falha de desenho, não como braço
+        static readonly Vector3 GiroDoBracoEsquerdo = new Vector3(-26f, 20f, 0f);
+        static readonly Vector3 GiroDoAntebracoEsquerdo = new Vector3(6f, 0f, 0f);
+
+        /// <summary>
+        /// Quanto o facho sai torto em relação ao que a câmera mira, em graus.
+        /// Não é zero de propósito: apontada exatamente para a frente, a
+        /// lanterna aparece de topo — dois discos pretos e nada mais. Uns
+        /// poucos graus de lado mostram o corpo dela e não mudam onde a luz cai.
+        /// </summary>
+        static readonly Vector3 DesvioDoFacho = new Vector3(-2f, 9f, 0f);
+        /// <summary>Do meio da pega até a origem do modelo da lanterna.</summary>
+        const float RecuoDaPega = 0.055f;
+        /// <summary>
+        /// A lanterna foi desenhada para aparecer sozinha num canto da tela.
+        /// Fechada dentro de uma mão de tamanho real ela vira porrete: o aro
+        /// da cabeça tem oito centímetros e o punho tem nove de largura.
+        /// </summary>
+        const float EscalaDaLanterna = 0.80f;
+
+        /// <summary>
+        /// Dobra os dedos de uma das mãos. Vai osso por osso porque o rig não
+        /// traz pose nenhuma — só a hierarquia.
+        ///
+        /// Cada falange gira em torno do X local dela, que é o eixo do nó do
+        /// dedo. Como os ossos vêm sem rotação de repouso, a dobra se acumula
+        /// sozinha descendo a cadeia: a ponta do dedo fecha somando as três.
+        /// </summary>
+        static void FecharAMao(Skeleton3D esqueleto, string lado, float[] curva,
+                               float polegar, Vector3 giroDoPunho)
+        {
+            Girar(esqueleto, "hand" + lado, giroDoPunho);
+
+            foreach (string dedo in new[] { "index", "middle", "ring", "pinky" })
+                for (int f = 0; f < 3; f++)
+                    Girar(esqueleto, dedo + (f + 1) + lado, new Vector3(curva[f], 0, 0));
+
+            // o polegar se opõe aos outros: fecha girando em Z, por cima do cano
+            float ang = polegar * (lado == "_R" ? 1f : -1f);
+            for (int f = 0; f < 3; f++)
+                Girar(esqueleto, "thumb" + (f + 1) + lado, new Vector3(0, 0, ang));
+        }
+
+        /// <summary>
+        /// Gira um osso, em graus, mantendo onde ele nasce.
+        ///
+        /// Vai por <c>SetBonePose</c> e não pelo óbvio <c>SetBonePoseRotation</c>
+        /// porque neste Godot o segundo GUARDA o valor e não move nada: o
+        /// getter devolve a rotação certinha, os filhos do osso continuam no
+        /// lugar, e a tela mostra a mão aberta. Levei uma captura inteira para
+        /// descobrir que o problema não eram os ângulos.
+        /// </summary>
+        static void Girar(Skeleton3D esqueleto, string nome, Vector3 graus)
+        {
+            int osso = esqueleto.FindBone(nome);
+            if (osso < 0) return;
+            var t = esqueleto.GetBonePose(osso);
+            t.Basis = Basis.FromEuler(graus * (Mathf.Pi / 180f));
+            esqueleto.SetBonePose(osso, t);
+        }
+
+        /// <summary>
+        /// Acerta a pele das mãos.
+        ///
+        /// O modelo pinta a pele nas CORES DE VÉRTICE, e deixa o difuso do
+        /// material em branco puro — quem não ligar `VertexColorUseAsAlbedo`
+        /// recebe duas mãos brancas chapadas. É o mesmo defeito que a criatura
+        /// tinha, com outro nome.
+        ///
+        /// O material importado é um recurso compartilhado, então é duplicado
+        /// antes: mexer nele direto mexeria em qualquer outro uso do arquivo.
+        /// </summary>
+        void VestirMaos(Node3D raiz)
+        {
+            foreach (var n in TodosOsNos(raiz))
+            {
+                if (n is not MeshInstance3D mi || mi.Mesh == null) continue;
+                for (int i = 0; i < mi.Mesh.GetSurfaceCount(); i++)
+                {
+                    var m = mi.Mesh.SurfaceGetMaterial(i) is StandardMaterial3D vindo
+                        ? (StandardMaterial3D)vindo.Duplicate()
+                        : new StandardMaterial3D();
+                    m.VertexColorUseAsAlbedo = true;
+                    // as cores de vértice já trazem sombreado pintado; o difuso
+                    // aqui só tira o excesso de brilho que a luz de mão daria
+                    m.AlbedoColor = new Color(TomDaPele, TomDaPele, TomDaPele);
+                    m.Roughness = 0.68f;
+                    m.Metallic = 0f;
+                    mi.SetSurfaceOverrideMaterial(i, m);
+                }
+            }
+        }
+
+        /// <summary>
+        /// Escurece a pele. As cores de vértice do modelo foram pintadas para
+        /// luz de dia; num prédio às escuras a mão saltava rosada no meio de
+        /// uma cena que é toda marrom e preta — a coisa mais clara da tela era
+        /// o braço do jogador.
+        /// </summary>
+        const float TomDaPele = 0.58f;
+
+        static T PrimeiroDoTipo<T>(Node raiz) where T : Node
+        {
+            foreach (var n in TodosOsNos(raiz))
+                if (n is T achado) return achado;
+            return null;
         }
 
         /// <summary>
@@ -1065,6 +1332,7 @@ namespace TurnoDaNoite.Jogo
             {
                 var no = Props.CriarComAltura(Peca.Criatura, Regras.AlturaDaCriatura, _matCriatura);
                 AddChild(no);
+                VestirCriatura(no);
                 _criaturas.Add(new NoCriatura
                 {
                     Raiz = no,
@@ -1108,10 +1376,25 @@ namespace TurnoDaNoite.Jogo
         /// </summary>
         void AnimarNaMao(NoCriatura no, Criatura c, float dt)
         {
-            if (no.CoxaE == null) return;
+            float velocidade = c.Velocidade.Comprimento;
+            no.Passo += dt * (0.9f + velocidade * 1.15f);
 
-            float vel = c.Velocidade.Comprimento;
-            no.Passo += dt * (0.9f + vel * 1.15f);
+            // Modelo importado sem esqueleto: não há perna para mexer, então o
+            // corpo inteiro rasteja — sobe e desce, rola de um lado para o
+            // outro, e afunda um pouco quando acelera. É pouco, mas é a
+            // diferença entre um bicho e um adesivo deslizando pelo chão.
+            if (no.CoxaE == null)
+            {
+                float ritmo = no.Passo * 1.6f;
+                no.Raiz.Position += new Vector3(0, Mathf.Sin(ritmo) * 0.045f, 0);
+                no.Raiz.Rotation = new Vector3(
+                    Mathf.Sin(ritmo * 0.5f) * 0.035f - velocidade * 0.02f,
+                    no.Raiz.Rotation.Y,
+                    Mathf.Sin(ritmo) * 0.06f);
+                return;
+            }
+
+            float vel = velocidade;
 
             float balanco = Mathf.Sin(no.Passo) * Mathf.Min(0.85f, 0.14f + vel * 0.13f);
             float contra = -balanco;
@@ -1127,6 +1410,52 @@ namespace TurnoDaNoite.Jogo
                                                  Mathf.Sin(no.Passo) * 0.05f, 0);
             if (no.Cabeca != null)
                 no.Cabeca.Rotation = new Vector3(0, Mathf.Sin(no.Passo * 0.5f) * 0.12f, 0);
+        }
+
+        /// <summary>
+        /// Troca os materiais do modelo importado da criatura.
+        ///
+        /// O .mtl que veio com ele dá difuso BRANCO PURO na pele. Com o facho
+        /// em cima, ela saía estourada, um vulto branco chapado no meio da
+        /// sala — o oposto do que um bicho no escuro tem de ser. Aqui a pele
+        /// vira escura (com a textura de pele, se houver) e só o que o artista
+        /// marcou como olho continua aceso.
+        ///
+        /// Vai superfície por superfície, e não com MaterialOverride, porque o
+        /// override substitui TODAS: apagaria os olhos junto com a pele.
+        /// </summary>
+        void VestirCriatura(Node3D raiz)
+        {
+            var pele = Texturizado("criatura", new Color(0.115f, 0.105f, 0.115f), 2.4f)
+                       ?? new StandardMaterial3D
+                       {
+                           AlbedoColor = new Color(0.085f, 0.078f, 0.085f),
+                           Roughness = 0.95f,
+                           SpecularMode = BaseMaterial3D.SpecularModeEnum.Disabled
+                       };
+
+            var olho = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(1f, 0.46f, 0.08f),
+                EmissionEnabled = true,
+                Emission = new Color(1f, 0.42f, 0.06f),
+                EmissionEnergyMultiplier = 3.2f,
+                Roughness = 0.35f
+            };
+
+            foreach (var n in TodosOsNos(raiz))
+            {
+                if (n is not MeshInstance3D mi || mi.Mesh == null) continue;
+
+                for (int s = 0; s < mi.Mesh.GetSurfaceCount(); s++)
+                {
+                    string nome = mi.Mesh.SurfaceGetMaterial(s)?.ResourceName ?? "";
+                    bool ehOlho = nome.Contains("eye", System.StringComparison.OrdinalIgnoreCase)
+                               || nome.Contains("glow", System.StringComparison.OrdinalIgnoreCase)
+                               || nome.Contains("olho", System.StringComparison.OrdinalIgnoreCase);
+                    mi.SetSurfaceOverrideMaterial(s, ehOlho ? olho : pele);
+                }
+            }
         }
 
         static Peca PecaDo(TipoRecipiente t) => t switch
@@ -1646,8 +1975,9 @@ namespace TurnoDaNoite.Jogo
                 float alvoX = Mathf.Sin(_balanco) * 0.012f;
                 float alvoY = Mathf.Abs(Mathf.Cos(_balanco)) * 0.010f;
                 _balancoDaMao = _balancoDaMao.Lerp(new Vector2(alvoX, alvoY), Mathf.Min(1f, dt * 8f));
-                _mao.Position = new Vector3(0.185f + _balancoDaMao.X, -0.215f + _balancoDaMao.Y, -0.60f);
-                _mao.Rotation = new Vector3(_balancoDaMao.Y * 2.5f, -_balancoDaMao.X * 3f, 0);
+                _mao.Position = _poseDaMao + new Vector3(_balancoDaMao.X, _balancoDaMao.Y, 0f);
+                _mao.RotationDegrees = _giroDaMao
+                                     + new Vector3(_balancoDaMao.Y * 143f, -_balancoDaMao.X * 172f, 0f);
                 _mao.Visible = !j.Escondido;
                 if (_matVidro != null)
                     _matVidro.EmissionEnergyMultiplier = j.LuzAcesa ? 1.4f * Mathf.Clamp(j.Bateria * 3f, 0.3f, 1f) : 0f;
@@ -1867,12 +2197,15 @@ namespace TurnoDaNoite.Jogo
                           && _animCriatura.HasAnimation("Walk") && _animCriatura.HasAnimation("Run");
             bool comMembros = _criaturas.Count > 0 && _criaturas.TrueForAll(
                 n => n.CoxaE != null && n.CoxaD != null && n.BracoE != null && n.BracoD != null);
+            // modelo importado sem rig: o corpo inteiro rasteja
+            bool comCorpo = _criaturas.Count > 0 && _criaturas.TrueForAll(n => n.Raiz != null);
 
-            Checar(comRig ? "animação: esqueleto do modelo (" +
+            Checar(comRig ? "animacao: esqueleto do modelo (" +
                             string.Join(", ", _animCriatura.GetAnimationList()) + ")"
-                 : comMembros ? "animação: membros montados em código"
-                 : "a criatura não tem como andar: nem esqueleto, nem membros",
-                comRig || comMembros);
+                 : comMembros ? "animacao: membros montados em codigo"
+                 : comCorpo ? "animacao: o corpo inteiro rasteja (modelo sem rig)"
+                 : "a criatura nao tem como andar",
+                comRig || comMembros || comCorpo);
 
             // roda 20 s de partida sem jogador para ver a simulação andar
             var antes = _partida.Ela.Pos;
@@ -1899,6 +2232,30 @@ namespace TurnoDaNoite.Jogo
                 ? "todo movel colide do tamanho que aparece"
                 : "movel maior na tela do que na colisao: " + string.Join(", ", tortos.Distinct()),
                 tortos.Count == 0);
+
+            // A mão. Ela fica em quadro do primeiro ao último segundo de
+            // partida, e já passou meia hora aberta e espalmada porque
+            // `SetBonePoseRotation` guarda o ângulo sem mover osso nenhum: os
+            // getters respondiam certo e a tela mostrava o contrário. Daqui em
+            // diante quem responde é a distância entre a ponta do dedo posada
+            // e a ponta do dedo em repouso — que é o que a tela mostra.
+            if (_ossosDasMaos != null)
+            {
+                int ponta = _ossosDasMaos.FindBone("index3_R");
+                int punho = _ossosDasMaos.FindBone("hand_R");
+                // medido DENTRO da mão: contra o repouso do esqueleto inteiro,
+                // girar o ombro já passava no teste com os dedos esticados
+                float fechou = ponta < 0 || punho < 0 ? 0f
+                    : (_ossosDasMaos.GetBoneGlobalPose(punho).AffineInverse()
+                       * _ossosDasMaos.GetBoneGlobalPose(ponta).Origin)
+                      .DistanceTo(_ossosDasMaos.GetBoneGlobalRest(punho).AffineInverse()
+                       * _ossosDasMaos.GetBoneGlobalRest(ponta).Origin);
+                Checar($"maos: dedos fecharam ({fechou * 100f:0} cm da pose de repouso)", fechou > 0.03f);
+                Checar("maos: lanterna pendurada no punho",
+                       _vidroDaLanterna != null
+                       && PrimeiroDoTipo<BoneAttachment3D>(_mao) != null);
+            }
+            else Checar("maos: modelo em codigo (sem esqueleto)", _vidroDaLanterna != null);
 
             GD.Print(Props.Relatorio());
             GD.Print(ok ? "auto-teste: TUDO CERTO" : "auto-teste: FALHOU");
