@@ -534,6 +534,9 @@ namespace TurnoDaNoite.Jogo
             Girar(esqueleto, "upperarm_L", GiroDoBracoEsquerdo);
             Girar(esqueleto, "forearm_L", GiroDoAntebracoEsquerdo);
 
+            PorAsLuvas(esqueleto, "_R");
+            PorAsLuvas(esqueleto, "_L");
+
             var preso = new BoneAttachment3D { Name = "PunhoDireito", BoneName = "hand_R" };
             esqueleto.AddChild(preso);
 
@@ -588,7 +591,7 @@ namespace TurnoDaNoite.Jogo
         /// tem geometria de braço atrás da câmera, e sem isto ela aparece
         /// cortada pelo plano de corte, pelo avesso.
         /// </summary>
-        static readonly Vector3 PoseDosBracos = new Vector3(0.10f, -0.05f, -0.34f);
+        static readonly Vector3 PoseDosBracos = new Vector3(0.15f, -0.07f, -0.32f);
         /// <summary>Inclina os dois para baixo: o modelo vem com os braços na horizontal, e mão na altura do olho lê como zumbi.</summary>
         static readonly Vector3 GiroDosBracos = new Vector3(-18f, 0f, 0f);
         const float EscalaDosBracos = 1f;
@@ -603,7 +606,7 @@ namespace TurnoDaNoite.Jogo
         /// só, sem osso de torção, e a guinada inteira amassava o dorso da mão
         /// num nó. O túnel do punho deixa de apontar exatamente para a frente,
         /// e não faz falta: quem mira a lanterna é EncaixarNaGarra, não o dedo.
-        static readonly Vector3 GiroDoPunho = new Vector3(0f, 60f, 0f);
+        static readonly Vector3 GiroDoPunho = new Vector3(0f, 24f, 0f);
         static readonly Vector3 GiroDoPunhoLivre = new Vector3(-10f, 0f, 0f);
 
         /// <summary>Quanto cada falange dobra, em graus. Negativo é para dentro da palma.</summary>
@@ -686,6 +689,56 @@ namespace TurnoDaNoite.Jogo
         }
 
         /// <summary>
+        /// Enfia o antebraço dentro de um punho de couro.
+        ///
+        /// Fica pendurado no osso do ANTEBRAÇO, e não no da mão, porque é onde
+        /// uma luva fica: a mão gira dentro dela. Preso na mão, o punho girava
+        /// junto e o caroço do pulso reaparecia por baixo.
+        ///
+        /// A posição sai do próprio esqueleto — o repouso do osso da mão É o
+        /// vetor cotovelo-pulso, no quadro do antebraço — então mexer nas poses
+        /// do braço não desencaixa nada.
+        /// </summary>
+        void PorAsLuvas(Skeleton3D esqueleto, string lado)
+        {
+            int antebraco = esqueleto.FindBone("forearm" + lado);
+            int punho = esqueleto.FindBone("hand" + lado);
+            if (antebraco < 0 || punho < 0) return;
+
+            var ate = esqueleto.GetBoneRest(punho).Origin;
+            if (ate.LengthSquared() < 1e-6f) return;
+
+            var preso = new BoneAttachment3D { Name = "Luva" + lado, BoneName = "forearm" + lado };
+            esqueleto.AddChild(preso);
+
+            var luva = Modelos.PunhoDaLuva(ate.Length() * FatiaDoAntebraco,
+                                           RaioDaLuvaNoPulso, RaioDaLuvaNoCotovelo);
+            luva.Transform = new Transform3D(Basis.LookingAt(ate.Normalized(), Vector3.Up),
+                                             ate * BocaDaLuva);
+            preso.AddChild(luva);
+
+            foreach (var n in TodosOsNos(luva))
+                if (n is GeometryInstance3D g)
+                {
+                    g.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+                    g.Layers = CamadaDaMao;
+                }
+        }
+
+        /// <summary>Onde fica a boca da luva, em fração do antebraço. Passa de 1 para engolir o pulso.</summary>
+        // Passa de 1 para ENGOLIR o pulso. Parada em cima da junta, a boca da
+        // luva deixava o caroço do pulso aparecendo logo à frente dela, e o
+        // couro em volta só servia de moldura para o defeito.
+        const float BocaDaLuva = 1.13f;
+        /// <summary>Quanto do antebraço a luva cobre. O resto, do cotovelo para trás, sai de quadro.</summary>
+        const float FatiaDoAntebraco = 0.56f;
+        const float RaioDaLuvaNoPulso = 0.047f;
+        // A luva aponta para a câmera, então a ponta grossa fica a meio metro
+        // do olho e a perspectiva engorda ela três vezes. Catorze centímetros
+        // de diâmetro, que é uma luva de solda normal, enchiam um terço da tela.
+        const float RaioDaLuvaNoCotovelo = 0.056f;
+
+        /// <summary>
         /// Acerta a pele das mãos.
         ///
         /// O modelo pinta a pele nas CORES DE VÉRTICE, e deixa o difuso do
@@ -710,7 +763,7 @@ namespace TurnoDaNoite.Jogo
                     // as cores de vértice já trazem sombreado pintado; o difuso
                     // aqui só tira o excesso de brilho que a luz de mão daria
                     m.AlbedoColor = new Color(TomDaPele, TomDaPele, TomDaPele);
-                    m.Roughness = 0.68f;
+                    m.Roughness = 0.80f;
                     m.Metallic = 0f;
                     mi.SetSurfaceOverrideMaterial(i, m);
                 }

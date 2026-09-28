@@ -181,7 +181,14 @@ O que o código faz com ele, porque o arquivo não traz pronto:
   nada — as pistas dos dedos têm todas o mesmo valor do começo ao fim;
 - **liga `VertexColorUseAsAlbedo`**, senão as duas mãos saem brancas chapadas;
 - **pendura a lanterna no osso `hand_R`**, calculando a posição no meio dos
-  quatro dedos dobrados — assim mexer no cotovelo não deixa a lanterna para trás.
+  quatro dedos dobrados — assim mexer no cotovelo não deixa a lanterna para trás;
+- **enfia o antebraço num punho de couro** (`Modelos.PunhoDaLuva`), que existe
+  para tapar três defeitos do modelo, e não para enfeitar: um caroço no pulso
+  (a pele se enrolando quando o osso da mão gira, porque não há osso de
+  torção entre cotovelo e mão), uma costura serrilhada no meio do antebraço
+  onde as cores de vértice trocam de pele para manga, e o antebraço nu
+  atravessando o canto de baixo da tela. O punho fica pendurado no osso do
+  ANTEBRAÇO, não no da mão: a mão gira dentro dele, como numa luva de verdade.
 
 Os números de pose ficam todos juntos em `Bootstrap.cs`, logo abaixo de
 `MontarBracos`. Para trocar por outro modelo, basta que ele:

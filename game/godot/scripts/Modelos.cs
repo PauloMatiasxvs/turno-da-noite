@@ -564,6 +564,80 @@ namespace TurnoDaNoite.Jogo
             return raiz;
         }
 
+        // ---------------------------------------------------------- a luva
+
+        /// <summary>
+        /// O punho da luva. Existe para TAPAR, não para enfeitar.
+        ///
+        /// O modelo de braços que veio pronto tem três defeitos no antebraço, e
+        /// os três ficam no mesmo pedaço de tela:
+        ///
+        /// - um **caroço no pulso**, que é a pele se enrolando quando o osso da
+        ///   mão gira — não há osso de torção entre cotovelo e mão, então a
+        ///   guinada inteira cai num vértice só;
+        /// - uma **costura serrilhada** no meio do antebraço, onde as cores de
+        ///   vértice trocam de pele para manga: a fronteira segue a malha e sai
+        ///   rasgada;
+        /// - e o antebraço inteiro, **nu e rosado**, atravessando o canto de
+        ///   baixo da tela. Isso a mão montada em código já tinha descoberto e
+        ///   resolvido cortando fora o antebraço: vinte e quatro centímetros de
+        ///   cilindro claro no canto do quadro viram salsicha, e nenhuma
+        ///   textura conserta isso.
+        ///
+        /// Um cano de couro cobrindo de um terço do antebraço até passar do
+        /// pulso resolve os três de uma vez, e é o que qualquer jogo em primeira
+        /// pessoa põe ali de qualquer jeito.
+        ///
+        /// Aponta para −Z como todo o resto: −Z é a mão, +Z é o cotovelo, e a
+        /// origem fica na boca da luva.
+        /// </summary>
+        public static Node3D PunhoDaLuva(float comprimento, float raioNaMao, float raioNoCotovelo)
+        {
+            var raiz = new Node3D { Name = "PunhoDaLuva" };
+
+            var couro = _couroDaMao ?? new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.098f, 0.078f, 0.066f), Roughness = 0.88f
+            };
+            var vinco = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.052f, 0.042f, 0.036f), Roughness = 0.94f
+            };
+
+            var cano = new MeshInstance3D
+            {
+                Name = "Cano",
+                Mesh = new CylinderMesh
+                {
+                    TopRadius = raioNoCotovelo,
+                    BottomRadius = raioNaMao,
+                    Height = comprimento,
+                    RadialSegments = 20
+                },
+                MaterialOverride = couro,
+                Position = new Vector3(0, 0, comprimento / 2f)
+            };
+            // o topo do cilindro nasce em +Y; girar 90° em X manda ele para +Z,
+            // que é o lado do cotovelo
+            cano.RotateX(Mathf.Pi / 2);
+            raiz.AddChild(cano);
+
+            // a boca, enrolada para fora. É o que dá borda à silhueta: sem ela a
+            // luva termina numa aresta fina e parece papel
+            var boca = Cilindro(raioNaMao * 1.10f, comprimento * 0.10f, vinco,
+                                new Vector3(0, 0, comprimento * 0.05f), 20);
+            boca.RotateX(Mathf.Pi / 2);
+            raiz.AddChild(boca);
+
+            // e uma tira apertando, a dois terços do cano
+            var tira = Cilindro(raioNoCotovelo * 1.04f, comprimento * 0.08f, vinco,
+                                new Vector3(0, 0, comprimento * 0.66f), 20);
+            tira.RotateX(Mathf.Pi / 2);
+            raiz.AddChild(tira);
+
+            return raiz;
+        }
+
         // ------------------------------------------------------- a lanterna
 
         /// <summary>
