@@ -111,6 +111,8 @@ namespace TurnoDaNoite.Jogo
         // modos de captura do prédio de dois andares: sala do quadro lá em cima,
         // pé da escada, e a planta aberta na tela
         bool _verAndarDeCima, _verMapa, _verEscada, _verCriatura, _verMapaDeCima, _verArmario;
+        /// <summary>Põe a captura DENTRO de um cômodo. O jogador nasce no pátio, então sem isto nenhuma foto mostra o acabamento das salas.</summary>
+        bool _verDentro;
 
         public override void _Ready()
         {
@@ -132,6 +134,7 @@ namespace TurnoDaNoite.Jogo
                 if (arg == "--vercriatura") _verCriatura = true;
                 if (arg == "--vermapacima") { _verMapa = true; _verMapaDeCima = true; }
                 if (arg == "--verarmario") _verArmario = true;
+                if (arg == "--verdentro") _verDentro = true;
             }
 
             Opcoes.Carregar();
@@ -521,10 +524,10 @@ namespace TurnoDaNoite.Jogo
                 return;
             }
 
-            FecharAMao(esqueleto, "_R", CurvaDaGarra, CurvaDoPolegarNaGarra, GiroDoPunho);
+            FecharAMao(esqueleto, "_R", ForcaDaGarra, GiroDoPunho);
             // a esquerda fica solta, só não esticada: dedo reto e imóvel é a
             // coisa que mais denuncia manequim
-            FecharAMao(esqueleto, "_L", CurvaDaMaoLivre, CurvaDoPolegarLivre, GiroDoPunhoLivre);
+            FecharAMao(esqueleto, "_L", ForcaDaMaoLivre, GiroDoPunhoLivre);
 
             // os braços. O modelo vem com os dois estendidos para a frente, na
             // mesma altura, feito quem pede esmola: quem carrega uma lanterna
@@ -609,11 +612,28 @@ namespace TurnoDaNoite.Jogo
         static readonly Vector3 GiroDoPunho = new Vector3(0f, 24f, 0f);
         static readonly Vector3 GiroDoPunhoLivre = new Vector3(-10f, 0f, 0f);
 
-        /// <summary>Quanto cada falange dobra, em graus. Negativo é para dentro da palma.</summary>
-        static readonly float[] CurvaDaGarra = { -52f, -68f, -46f };
-        static readonly float[] CurvaDaMaoLivre = { -26f, -34f, -22f };
-        const float CurvaDoPolegarNaGarra = -34f;
-        const float CurvaDoPolegarLivre = -14f;
+        /// <summary>
+        /// O punho fechado, como o gerador do modelo o define.
+        ///
+        /// Estes números não são meus: saem da função `fist()` da página que
+        /// exportou o `.glb` (−1,45 / −1,65 / −1,00 radianos por falange, e
+        /// três eixos no polegar). Eu tinha chutado −52/−68/−46 graus e um
+        /// polegar girando só em Z, que ficava deitado em cima do cano em vez
+        /// de dar a volta nele. Quem desenhou a mão sabia onde ela dobra.
+        ///
+        /// A força multiplica tudo: 1 é o punho cerrado de soco, e não serve
+        /// para segurar coisa nenhuma — os dedos atravessariam o cano.
+        /// </summary>
+        static readonly float[] CurvaDoPunho = { -83.1f, -94.5f, -57.3f };
+        static readonly Vector3[] CurvaDoPolegar =
+        {
+            new Vector3(-11.5f, -43.0f, 25.8f),
+            new Vector3(  0.0f, -31.5f, 11.5f),
+            new Vector3(  0.0f, -25.8f,  0.0f)
+        };
+        /// <summary>Quanto do punho cerrado cada mão faz.</summary>
+        const float ForcaDaGarra = 0.72f;
+        const float ForcaDaMaoLivre = 0.26f;
 
         /// <summary>
         /// Onde a lanterna fica, no espaço do osso `hand_R`. O X positivo vira
@@ -655,19 +675,25 @@ namespace TurnoDaNoite.Jogo
         /// dedo. Como os ossos vêm sem rotação de repouso, a dobra se acumula
         /// sozinha descendo a cadeia: a ponta do dedo fecha somando as três.
         /// </summary>
-        static void FecharAMao(Skeleton3D esqueleto, string lado, float[] curva,
-                               float polegar, Vector3 giroDoPunho)
+        static void FecharAMao(Skeleton3D esqueleto, string lado, float forca, Vector3 giroDoPunho)
         {
             Girar(esqueleto, "hand" + lado, giroDoPunho);
 
             foreach (string dedo in new[] { "index", "middle", "ring", "pinky" })
                 for (int f = 0; f < 3; f++)
-                    Girar(esqueleto, dedo + (f + 1) + lado, new Vector3(curva[f], 0, 0));
+                    Girar(esqueleto, dedo + (f + 1) + lado,
+                          new Vector3(CurvaDoPunho[f] * forca, 0, 0));
 
-            // o polegar se opõe aos outros: fecha girando em Z, por cima do cano
-            float ang = polegar * (lado == "_R" ? 1f : -1f);
+            // O polegar se opõe aos outros, e por isso dobra nos três eixos.
+            // A mão esquerda espelha os dois últimos: espelhar os três punha o
+            // dedo para fora da palma.
+            float espelho = lado == "_R" ? 1f : -1f;
             for (int f = 0; f < 3; f++)
-                Girar(esqueleto, "thumb" + (f + 1) + lado, new Vector3(0, 0, ang));
+            {
+                var g = CurvaDoPolegar[f];
+                Girar(esqueleto, "thumb" + (f + 1) + lado,
+                      new Vector3(g.X, g.Y * espelho, g.Z * espelho) * forca);
+            }
         }
 
         /// <summary>
@@ -1018,6 +1044,7 @@ namespace TurnoDaNoite.Jogo
             }
 
             MontarAcabamentoDasParedes(raiz, andar);
+            MontarPisosDosComodos(raiz, andar);
             MontarPortasInternas(raiz, andar);
 
             // luminárias mortas por sala; uma em cada quatro ainda pisca
@@ -1067,6 +1094,64 @@ namespace TurnoDaNoite.Jogo
         /// separando dois acabamentos. Custa duas caixas por face e é o que
         /// mais rápido faz o lugar parecer construído por alguém.
         /// </summary>
+        /// <summary>
+        /// Os quatro acabamentos que um cômodo pode ter.
+        ///
+        /// Antes havia um só, e o prédio inteiro era o mesmo corredor repetido
+        /// cinquenta e oito vezes: mesma parede, mesmo lambril, mesmo chão.
+        /// Não é que ficasse feio — ficava IGUAL, e num prédio onde a graça é
+        /// não saber onde você já esteve, tudo igual tira o pouco que o mapa
+        /// tem de referência.
+        ///
+        /// A escolha sai do próprio cômodo, e não de um sorteio: a mesma sala
+        /// tem sempre o mesmo acabamento, em toda visita e em toda face.
+        /// </summary>
+        readonly struct Acabamento
+        {
+            public readonly Material Baixo, Cima, Chao;
+            public Acabamento(Material baixo, Material cima, Material chao)
+            { Baixo = baixo; Cima = cima; Chao = chao; }
+        }
+
+        Acabamento[] _acabamentos;
+
+        void PrepararAcabamentos()
+        {
+            // Uv1Scale multiplica a POSIÇÃO no mundo, então número alto é
+            // azulejo pequeno. Com 1,05 dava pastilha de seis centímetros e a
+            // parede lia como estampa; 0,40 dá azulejo de dezesseis, que é o
+            // que se assenta em corredor de prédio.
+            var azulejo = Texturizado("azulejo", new Color(0.78f, 0.76f, 0.70f), 0.40f);
+            var papel = Texturizado("papel", new Color(0.62f, 0.60f, 0.54f), 0.55f);
+            var tabua = Texturizado("tabua", new Color(0.54f, 0.46f, 0.38f), 0.78f);
+            var reboco = Texturizado("reboco", new Color(0.66f, 0.66f, 0.63f), 0.65f);
+
+            // sem arquivo nenhum, tudo cai no que já existia
+            var liso = new StandardMaterial3D
+            {
+                AlbedoColor = new Color(0.30f, 0.29f, 0.27f), Roughness = 0.82f
+            };
+            reboco ??= liso;
+
+            _acabamentos = new[]
+            {
+                new Acabamento(azulejo ?? reboco, papel ?? _matParede, tabua ?? _matPiso),
+                new Acabamento(reboco, _matParede, _matPiso),
+                new Acabamento(azulejo ?? reboco, reboco, _matPiso),
+                new Acabamento(_matParede, papel ?? reboco, tabua ?? _matPiso)
+            };
+        }
+
+        Acabamento AcabamentoDe(Sala sala)
+        {
+            if (_acabamentos == null) PrepararAcabamentos();
+            // cômodos de serviço são sempre os azulejados: é a pista de que
+            // aquele cômodo tem alguma serventia
+            if (sala.Tipo == TipoSala.Quadro || sala.Tipo == TipoSala.Camara) return _acabamentos[2];
+            int chave = sala.X * 31 + sala.Z * 17 + sala.Andar * 7;
+            return _acabamentos[((chave % _acabamentos.Length) + _acabamentos.Length) % _acabamentos.Length];
+        }
+
         void MontarAcabamentoDasParedes(Node3D raiz, int andar)
         {
             var predio = _partida.Predio;
@@ -1079,11 +1164,6 @@ namespace TurnoDaNoite.Jogo
             const float alturaPainel = 1.10f;
             const float alturaRodape = 0.16f;
 
-            var painelMat = Texturizado("reboco", new Color(0.66f, 0.66f, 0.63f), 0.65f)
-                            ?? new StandardMaterial3D
-                            {
-                                AlbedoColor = new Color(0.30f, 0.29f, 0.27f), Roughness = 0.82f
-                            };
             var rodapeMat = new StandardMaterial3D
             {
                 AlbedoColor = new Color(0.085f, 0.082f, 0.078f), Roughness = 0.86f
@@ -1109,6 +1189,10 @@ namespace TurnoDaNoite.Jogo
                         var vizinha = predio.ParaMundo(new Celula(cx + dx, cz + dz, andar));
                         if (predio.SalaEm(vizinha, andar)?.Tipo == TipoSala.Patio) continue;
 
+                        var dentro = predio.SalaEm(vizinha, andar);
+                        var acabamento = dentro == null ? AcabamentoDe(predio.Salas[0])
+                                                        : AcabamentoDe(dentro);
+
                         var m = predio.ParaMundo(new Celula(cx, cz, andar));
                         bool noEixoX = dx != 0;
 
@@ -1128,8 +1212,16 @@ namespace TurnoDaNoite.Jogo
                             });
                         }
 
+                        // O revestimento de cima. É ele que dá identidade ao
+                        // cômodo: a parede estrutural continua sendo a mesma
+                        // caixa para o prédio inteiro, e cada sala veste a sua
+                        // por dentro, como acontece de verdade.
+                        float alturaCima = Predio.PeDireito - alturaPainel - 0.11f;
+                        Por(0.025f, alturaCima, alturaPainel + 0.11f + alturaCima / 2f,
+                            acabamento.Cima);
+
                         // o painel de baixo, que é a peça grande
-                        Por(0.035f, alturaPainel, alturaPainel / 2f, painelMat);
+                        Por(0.035f, alturaPainel, alturaPainel / 2f, acabamento.Baixo);
                         // o friso que remata o painel, saliente
                         Por(0.075f, 0.075f, alturaPainel + 0.02f, frisoMat);
                         Por(0.055f, 0.035f, alturaPainel + 0.075f, frisoMat);
@@ -1137,6 +1229,44 @@ namespace TurnoDaNoite.Jogo
                         Por(0.070f, alturaRodape, alturaRodape / 2f, rodapeMat);
                     }
                 }
+        }
+
+        /// <summary>
+        /// Uma chapa de chão por cômodo, por cima da laje.
+        ///
+        /// A laje é um plano só para o andar inteiro, e não dá para dar
+        /// material diferente a pedaços de um plano. Então cada sala ganha a
+        /// própria tampa, um centímetro acima — tacos num cômodo, carpete no
+        /// outro. Um centímetro é pouco para tropezar e bastante para o
+        /// z-fighting não aparecer.
+        ///
+        /// O pátio fica de fora: lá é rua, e rua não tem taco.
+        /// </summary>
+        void MontarPisosDosComodos(Node3D raiz, int andar)
+        {
+            var predio = _partida.Predio;
+            foreach (var sala in predio.Salas)
+            {
+                if (sala.Andar != andar || sala.Tipo == TipoSala.Patio) continue;
+
+                var chao = AcabamentoDe(sala).Chao;
+                if (chao == null) continue;
+
+                var a = predio.ParaMundo(new Celula(sala.X, sala.Z, andar));
+                var b = predio.ParaMundo(new Celula(sala.X + sala.Larg - 1, sala.Z + sala.Alt - 1, andar));
+
+                raiz.AddChild(new MeshInstance3D
+                {
+                    Mesh = new BoxMesh
+                    {
+                        Size = new Vector3(Mathf.Abs(b.X - a.X) + Predio.Celula, 0.02f,
+                                           Mathf.Abs(b.Z - a.Z) + Predio.Celula)
+                    },
+                    MaterialOverride = chao,
+                    Position = new Vector3((a.X + b.X) / 2f, 0.01f, (a.Z + b.Z) / 2f),
+                    CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
+                });
+            }
         }
 
         /// <summary>
@@ -1903,6 +2033,26 @@ namespace TurnoDaNoite.Jogo
                         SincronizarRecipientes(dt);
             SincronizarArmarios(dt);
                     }
+                    else if (_verDentro)
+                    {
+                        // o maior cômodo do térreo, do canto, olhando para o
+                        // meio: é o enquadramento que mostra chão, lambril,
+                        // parede de cima e teto de uma vez
+                        var maior = _partida.Predio.Salas[0];
+                        foreach (var sala in _partida.Predio.Salas)
+                            if (sala.Andar == 0 && sala.Tipo != TipoSala.Patio
+                                && sala.Larg * sala.Alt > maior.Larg * maior.Alt) maior = sala;
+
+                        var canto = _partida.Predio.ParaMundo(new Celula(maior.X, maior.Z, 0));
+                        var centro = _partida.Predio.ParaMundo(maior.Centro);
+                        _partida.Jogador.Pos = new P2(canto.X + 1.2f, canto.Z + 1.2f);
+                        _partida.Jogador.Andar = 0;
+                        _partida.Jogador.Lanterna = true;
+                        _giro = Mathf.Atan2(centro.X - canto.X, centro.Z - canto.Z) + Mathf.Pi;
+                        _inclinacao = -0.05f;
+                        SincronizarRecipientes(dt);
+                        SincronizarArmarios(dt);
+                    }
                     else if (_verItem)
                     {
                         // encosta no item para julgar o modelo, em vez de adivinhar
@@ -1912,7 +2062,8 @@ namespace TurnoDaNoite.Jogo
                     }
                     else { _partida.Passo(1f / 60f, new Comando()); _giro += dt * 0.35f; }
                 }
-                if (!_verRecipiente && !_verAndarDeCima && !_verEscada && !_verCriatura && !_verArmario)
+                if (!_verRecipiente && !_verAndarDeCima && !_verEscada && !_verCriatura
+                    && !_verArmario && !_verDentro)
                     _inclinacao = -0.14f;   // olha um pouco para baixo: mostra chao e parede
                 _quadrosDeFoto++;
                 SincronizarCamera(dt);

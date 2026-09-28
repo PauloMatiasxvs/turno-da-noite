@@ -11,6 +11,12 @@ Para conferir os números de uma partida específica:
 godot --headless --path game/godot -- --selftest
 ```
 
+Para ver o acabamento dos cômodos sem jogar:
+
+```bash
+godot --path game/godot -- --screenshot --verdentro
+```
+
 ---
 
 ## 1. O que se pega

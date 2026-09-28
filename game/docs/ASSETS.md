@@ -148,7 +148,11 @@ toda a luz da lanterna — a cena ficava preta mesmo com energia 500 no holofote
 | `metal` | ambientCG (CC0) | armários, porta da frente, lanterna |
 | `madeira` | ambientCG — Planks037A | caixotes, bancadas |
 | `ferrugem` | ambientCG — Metal041B | tambores, quadro elétrico |
-| `couro` | ambientCG — Leather037 | luva da mão montada em código |
+| `couro` | ambientCG — Leather037 | punho da luva |
+| `azulejo` | **sua** (pacote do gerador) | lambril dos cômodos |
+| `papel` | **sua** (pacote do gerador) | parede de cima, papel de parede manchado |
+| `tabua` | **sua** (pacote do gerador) | assoalho de taco |
+| `gesso` | **sua** (pacote do gerador) | reserva para forro |
 
 Para trocar qualquer uma, ponha três arquivos em
 `game/godot/assets/texturas/` com o mesmo nome e os sufixos `_cor`, `_normal` e
@@ -222,6 +226,37 @@ python tools/limpar-glb.py entrada.glb [saida.glb]
 
 O Godot ignora `extras`, então nada se perde. Rode nisso todo `.glb` que vier
 de gerador online antes de pôr na pasta.
+
+## Acabamento por cômodo
+
+Cada sala escolhe um de quatro acabamentos — lambril, parede de cima e chão —
+e a escolha sai da PRÓPRIA sala (posição e andar), não de um sorteio: a mesma
+sala tem sempre o mesmo acabamento, em toda visita e em toda face.
+
+| | Lambril | Parede de cima | Chão |
+|---|---|---|---|
+| 0 | azulejo | papel de parede | taco |
+| 1 | reboco | nogueira | carpete |
+| 2 | azulejo | reboco | carpete |
+| 3 | nogueira | papel de parede | taco |
+
+O cômodo do quadro elétrico e a câmara são sempre o 2: é a pista visual de
+que aquele cômodo tem serventia.
+
+Duas coisas que isso exigiu:
+
+- a parede estrutural continua sendo a mesma caixa para o prédio inteiro, e
+  **cada sala veste a sua por dentro** com uma chapa fina — como acontece de
+  verdade. Uma caixa só não pode ter dois materiais;
+- a laje é um plano só por andar, então **cada cômodo ganha a própria tampa
+  de chão**, um centímetro acima. Pouco para tropeçar, bastante para o
+  z-fighting não aparecer.
+
+Para ver por dentro sem jogar:
+
+```bash
+godot --path game/godot -- --screenshot --verdentro
+```
 
 ## A tabela dos itens
 
