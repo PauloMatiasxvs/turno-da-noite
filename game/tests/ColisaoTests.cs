@@ -31,14 +31,50 @@ namespace TurnoDaNoite.Tests
                        + p.Adornos.Count(a => a.Solido)
                        + 1;                                    // o quadro elétrico
 
-            // batentes e montantes de escada entram também, dois de cada
+            // Por vão: dois batentes e a folha da porta. Escada: uma fileira
+            // de postes de cada lado, nos dois andares que ela liga.
             int vaos = 0;
             for (int a = 0; a < p.Predio.Andares; a++)
                 vaos += p.Predio.Vaos(a).Count(v => p.Predio.EscadaEm(v.celula) == null);
-            int esperado = moveis + vaos * 2 + p.Predio.Escadas.Count * 4;
+            int esperado = moveis
+                         + vaos * (2 + Regras.PostesDaFolha)
+                         + p.Predio.Escadas.Count * 2 * 2 * Regras.PostesDoLance;
 
             Assert.Equal(esperado, p.Solidos.Count);
             Assert.All(p.Solidos, s => Assert.True(s.Raio > 0.01f));
+        }
+
+        [Theory]
+        [InlineData(1)]
+        [InlineData(1234)]
+        [InlineData(4242)]
+        public void NaoDaParaAtravessarOLanceDeEscadaDeLado(int semente)
+        {
+            // A lateral do lance era UM círculo, no meio da célula: meio metro
+            // de viga colidia e dois e meio não. Dava para andar de lado através
+            // da escada, por qualquer ponta que não fosse o centro.
+            //
+            // O meio do poço continua livre de propósito — é por ali que se
+            // sobe —, então o que se mede é a linha da viga, de ponta a ponta.
+            var p = Nova(semente);
+            var e = p.Predio.Escadas[0];
+            var centro = p.Predio.ParaMundo(new Celula(e.Cx, e.Cz, e.De));
+
+            for (int i = 0; i <= 6; i++)
+            {
+                float z = centro.Z + (i / 6f - 0.5f) * Predio.Celula * 0.86f;
+                foreach (float lado in new[] { -1f, 1f })
+                {
+                    var naViga = new P2(centro.X + lado * Regras.MeioLanceDaEscada, z);
+                    var depois = Colisao.Empurrar(naViga, Regras.RaioJogador, p.Solidos, e.De);
+                    Assert.True(P2.Distancia(depois, naViga) > 0.05f,
+                        $"z={z:0.00} lado={lado}: a viga do lance não empurrou ninguém");
+                }
+            }
+
+            // e o meio segue livre, senão o andar de cima fica inalcançável
+            var meio = new P2(centro.X, centro.Z);
+            Assert.True(P2.Distancia(Colisao.Empurrar(meio, Regras.RaioJogador, p.Solidos, e.De), meio) < 0.01f);
         }
 
         [Theory]

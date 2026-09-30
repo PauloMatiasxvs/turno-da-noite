@@ -49,12 +49,16 @@ namespace TurnoDaNoite.Core
         static readonly (TipoAdorno tipo, float raio)[] DeParede =
         {
             (TipoAdorno.Caixote, 0.45f),
-            (TipoAdorno.Barril, 0.38f),
+            // 0,38 era diâmetro de 76 cm para um tambor de 60: nove
+            // centímetros de parede invisível em volta de cada um
+            (TipoAdorno.Barril, 0.32f),
             (TipoAdorno.Bancada, 0.44f),
             (TipoAdorno.Pilha, 0.40f),
-            // o cano de parede vai do chao ao teto: raio zero fazia voce
-            // atravessar um tubo que a tela mostra inteiro
-            (TipoAdorno.CanoParede, 0.12f),
+            // O cano de parede vai do chao ao teto. Ja foi raio zero, e voce
+            // atravessava o tubo inteiro; depois foi 0,12 para um tubo de 48 cm
+            // de largura, e voce atravessava metade dele. O numero certo sai da
+            // medida do que `Modelos` desenha, nao do chute.
+            (TipoAdorno.CanoParede, 0.25f),
             (TipoAdorno.Entulho, 0f)
         };
 
