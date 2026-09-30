@@ -52,3 +52,9 @@ game/godot/captura_*.png.import
 
 # executavel exportado (184 MB): nao vai para o git
 dist-jogo/
+
+# lixo que o app copiou para ca de um espaco de trabalho temporario
+/neon-arena/
+/neon-arena-3d.html
+/neon-arena-web.html
+/turno-da-noite.html

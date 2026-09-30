@@ -1324,23 +1324,25 @@ namespace TurnoDaNoite.Jogo
                 });
 
                 // a folha, escancarada contra a parede, e a maçaneta
+                // dobradiça, abertura e largura saem de Regras: o núcleo põe a
+                // colisão da folha lendo os mesmos números
                 var folha = new Node3D
                 {
-                    Position = new Vector3(-(larguraVao / 2 + 0.08f), 0, 0.14f)
+                    Position = new Vector3(-Regras.MeioVaoDaPorta, 0, Regras.RecuoDaFolha)
                 };
-                folha.RotateY(-1.42f);
+                folha.RotateY(-Regras.AberturaDaFolha);
                 folha.AddChild(new MeshInstance3D
                 {
-                    Mesh = new BoxMesh { Size = new Vector3(larguraVao * 0.92f, alturaVao - 0.06f, 0.05f) },
+                    Mesh = new BoxMesh { Size = new Vector3(Regras.LarguraDaFolha, alturaVao - 0.06f, 0.05f) },
                     MaterialOverride = folhaMat,
-                    Position = new Vector3(larguraVao * 0.46f, (alturaVao - 0.06f) / 2, 0),
+                    Position = new Vector3(Regras.LarguraDaFolha / 2f, (alturaVao - 0.06f) / 2, 0),
                     CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
                 });
                 folha.AddChild(new MeshInstance3D
                 {
                     Mesh = new CylinderMesh { TopRadius = 0.022f, BottomRadius = 0.022f, Height = 0.12f, RadialSegments = 8 },
                     MaterialOverride = batenteMat,
-                    Position = new Vector3(larguraVao * 0.84f, 1.02f, 0.05f),
+                    Position = new Vector3(Regras.LarguraDaFolha * 0.91f, 1.02f, 0.05f),
                     CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
                 });
                 no.AddChild(folha);
@@ -1709,10 +1711,16 @@ namespace TurnoDaNoite.Jogo
             {
                 Node3D no = a.Tipo switch
                 {
-                    TipoAdorno.Caixote => Props.Criar(Peca.Caixote, new Vector3(0.85f, 0.8f, 0.85f), _matArmario),
-                    TipoAdorno.Barril => Props.Criar(Peca.Barril, new Vector3(0.72f, 0.95f, 0.72f), _matArmario),
-                    TipoAdorno.Bancada => Props.Criar(Peca.Bancada, Vector3.One, _matArmario),
-                    TipoAdorno.Pilha => Props.Criar(Peca.Pilha, Vector3.One, _matArmario),
+                    // A pegada sai do RAIO, e não de uma caixa escolhida à parte:
+                    // eram dois números para a mesma coisa, e eles divergiram.
+                    // A pilha enchia um metro com quarenta de colisão, o barril
+                    // enchia vinte e quatro com setenta e seis.
+                    // o teto de altura é generoso: apertado, ele é que passa a
+                    // mandar no tamanho, e a pegada volta a ficar menor que o raio
+                    TipoAdorno.Caixote => Props.CriarComPegada(Peca.Caixote, Pegada(a), 1.20f, _matArmario),
+                    TipoAdorno.Barril => Props.CriarComPegada(Peca.Barril, Pegada(a), 1.10f, _matArmario),
+                    TipoAdorno.Bancada => Props.CriarComPegada(Peca.Bancada, Pegada(a), 1.05f, _matArmario),
+                    TipoAdorno.Pilha => Props.CriarComPegada(Peca.Pilha, Pegada(a), 1.15f, _matArmario),
                     TipoAdorno.Entulho => Props.Criar(Peca.Entulho, Vector3.One, _matArmario),
                     TipoAdorno.CanoParede => Modelos.CanoParede(),
                     _ => Modelos.CanoTeto(ComprimentoDoCano(a.Pos))
@@ -1733,6 +1741,13 @@ namespace TurnoDaNoite.Jogo
         }
 
         /// <summary>O nó de cena de um adorno, achado pela posição. Só o diagnóstico usa.</summary>
+        /// <summary>
+        /// Largura que o móvel pode ocupar no chão: o diâmetro da colisão,
+        /// menos quatro centímetros. A folga vai para dentro de propósito —
+        /// se errar, que sobre colisão em vez de faltar.
+        /// </summary>
+        static float Pegada(Adorno a) => Mathf.Max(0.1f, a.Raio * 2f - 0.04f);
+
         Node3D AcharNoDoAdorno(Adorno a)
         {
             if (!_raizPorAndar.TryGetValue(a.Andar, out var raiz)) return null;
@@ -1743,16 +1758,27 @@ namespace TurnoDaNoite.Jogo
             return null;
         }
 
+        /// <summary>
+        /// Tamanho do que aparece na tela, no espaço da raiz.
+        ///
+        /// A versão anterior multiplicava a caixa pela escala DO PRÓPRIO nó, e
+        /// quem carrega a escala num modelo importado é o pai: `Props` escala
+        /// a raiz da cena, não cada malha. Resultado: caixote e barril eram
+        /// medidos crus, 11 e 12 centímetros, e o relatório dizia que sobrava
+        /// colisão de trinta centímetros onde na verdade faltava. Levar a
+        /// transformação inteira é o único jeito que também acerta quando a
+        /// peça vem girada.
+        /// </summary>
         static Aabb MedirNo(Node3D raiz)
         {
             var total = new Aabb();
             bool primeiro = true;
+            var paraRaiz = raiz.GlobalTransform.AffineInverse();
+
             foreach (var n in TodosOsNos(raiz))
             {
                 if (n is not VisualInstance3D v) continue;
-                var c = v.GetAabb();
-                // leva a escala do nó em conta, senão mede o modelo cru
-                c = new Aabb(c.Position * v.Scale, c.Size * v.Scale);
+                var c = (paraRaiz * v.GlobalTransform) * v.GetAabb();
                 if (primeiro) { total = c; primeiro = false; } else total = total.Merge(c);
             }
             return total;
@@ -2423,18 +2449,43 @@ namespace TurnoDaNoite.Jogo
             // jogador atravessar a metade de um movel e chamar de bug. Roda
             // sempre, para a proxima peca que entrar torta ser reprovada aqui
             // e nao na mao de quem joga.
-            var tortos = new List<string>();
-            foreach (var a in _partida.Adornos)
+            // A folga de 25 cm que estava aqui antes não media nada: um móvel
+            // com meio metro de largura e 44 cm de raio passava, e meio metro
+            // de largura com 44 de raio É atravessar o móvel pela quina. Agora
+            // a folga é de 6 cm, e o relatório sai sempre, com números: quando
+            // alguém reclamar de atravessar móvel, dá para apontar qual.
+            const float FolgaDaColisao = 0.06f;
+            var medido = new Dictionary<string, (float meia, float raio)>();
+
+            void Medir(string nome, Node3D no, float raio)
             {
-                if (!a.Solido) continue;
-                var no = AcharNoDoAdorno(a);
-                if (no == null) continue;
-                float meiaLargura = Mathf.Max(MedirNo(no).Size.X, MedirNo(no).Size.Z) / 2f;
-                if (meiaLargura > a.Raio + 0.25f) tortos.Add(a.Tipo.ToString());
+                if (no == null) return;
+                var caixa = MedirNo(no);
+                float meia = Mathf.Max(caixa.Size.X, caixa.Size.Z) / 2f;
+                if (!medido.TryGetValue(nome, out var antes) || meia - raio > antes.meia - antes.raio)
+                    medido[nome] = (meia, raio);
+            }
+
+            foreach (var a in _partida.Adornos)
+                if (a.Solido) Medir(a.Tipo.ToString(), AcharNoDoAdorno(a), a.Raio);
+            for (int i = 0; i < _recipientes.Count && i < _partida.Recipientes.Count; i++)
+                Medir(_partida.Recipientes[i].Tipo.ToString(), _recipientes[i].Raiz,
+                      Regras.RaioDoRecipiente(_partida.Recipientes[i].Tipo));
+            foreach (var arm in _armarios)
+                Medir("Armario", arm.Raiz, Regras.RaioArmario);
+
+            var tortos = new List<string>();
+            GD.Print("  corpo dos moveis (meia largura na tela / raio que colide):");
+            foreach (var par in medido.OrderByDescending(x => x.Value.meia - x.Value.raio))
+            {
+                float sobra = par.Value.meia - par.Value.raio;
+                bool cabe = sobra <= FolgaDaColisao;
+                if (!cabe) tortos.Add(par.Key);
+                GD.Print($"    {(cabe ? " " : "!")} {par.Key,-18} {par.Value.meia:0.00} m / {par.Value.raio:0.00} m  sobra {sobra * 100f:+0;-0} cm");
             }
             Checar(tortos.Count == 0
                 ? "todo movel colide do tamanho que aparece"
-                : "movel maior na tela do que na colisao: " + string.Join(", ", tortos.Distinct()),
+                : "movel maior na tela do que na colisao: " + string.Join(", ", tortos),
                 tortos.Count == 0);
 
             // A mão. Ela fica em quadro do primeiro ao último segundo de
