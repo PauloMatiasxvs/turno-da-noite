@@ -352,7 +352,51 @@ namespace TurnoDaNoite.Jogo
                 FogLightColor = new Color(0.03f, 0.032f, 0.045f),
                 FogDensity = 0.008f,
                 GlowEnabled = true,
-                GlowIntensity = 0.35f,
+                GlowIntensity = 0.55f,
+                GlowBloom = 0.15f,
+
+                // ---- NÉVOA VOLUMÉTRICA
+                //
+                // A coisa que mais faltava, e não era modelo nenhum.
+                //
+                // Até aqui o jogo tinha um círculo de luz no chão e nada entre a
+                // lanterna e ele: o ar era vazio. Lanterna de jogo de terror
+                // não é um círculo, é um CONE que se vê no ar, porque o lugar
+                // tem poeira. É isso que faz o facho virar objeto em vez de
+                // mancha, que dá volume ao escuro em volta dele, e que separa
+                // o fundo do primeiro plano sem precisar iluminar nada.
+                //
+                // A anisotropia é o detalhe que importa: positiva, a poeira
+                // espalha a luz PARA A FRENTE, e o cone fica brilhante quando
+                // você olha na direção dele e discreto quando olha de lado —
+                // que é como poeira se comporta. Em zero o ar inteiro acende
+                // por igual e a cena vira leite.
+                VolumetricFogEnabled = true,
+                // 0,022 enchia o ar inteiro por igual e o prédio virava leite
+                // cinzento: o escuro sumia, e com ele o jogo. Em terror a graça
+                // é o contraste — poça de luz dentro de preto —, então a poeira
+                // tem de ser pouca e só acender onde a luz bate forte.
+                VolumetricFogDensity = 0.009f,
+                VolumetricFogAlbedo = new Color(0.70f, 0.71f, 0.76f),
+                VolumetricFogEmission = new Color(0f, 0f, 0f),
+                VolumetricFogAnisotropy = 0.55f,
+                VolumetricFogLength = 48f,
+                VolumetricFogDetailSpread = 2.2f,
+                // zero: injetar ambiente na poeira é justamente o que a deixa cinza uniforme
+                VolumetricFogAmbientInject = 0f,
+
+                // ---- OCLUSÃO DE CONTATO
+                //
+                // Sombra curta onde as coisas se encontram: pé do armário com
+                // o chão, quina da parede com o teto, a caixa encostada no
+                // rodapé. Sem isso tudo parece colado por cima da cena em vez
+                // de apoiado nela — é metade do que faz uma maquete parecer
+                // maquete, e custa mais barato que qualquer modelo novo.
+                SsaoEnabled = true,
+                SsaoRadius = 0.9f,
+                SsaoIntensity = 2.2f,
+                SsaoPower = 1.4f,
+                SsaoLightAffect = 0.25f,
 
                 // Calibrado com captura de tela. A combinação anterior — ACES com
                 // exposição 1 mais AdjustmentContrast/Saturation ligados — comia
@@ -369,13 +413,15 @@ namespace TurnoDaNoite.Jogo
                 TonemapExposure = 1.15f,
                 AdjustmentEnabled = false
             };
-            if (_semNevoa) env.FogEnabled = false;
+            if (_semNevoa) { env.FogEnabled = false; env.VolumetricFogEnabled = false; }
             if (_diagnostico)
             {
                 env.BackgroundColor = new Color(1f, 0f, 1f);
                 env.AmbientLightColor = new Color(1f, 1f, 1f);
                 env.AmbientLightEnergy = 0.0f;   // so a lanterna ilumina
                 env.FogEnabled = false;
+                env.VolumetricFogEnabled = false;
+                env.SsaoEnabled = false;
             }
             if (!_semAmbiente) AddChild(new WorldEnvironment { Environment = env });
 
@@ -402,7 +448,10 @@ namespace TurnoDaNoite.Jogo
                 SpotAttenuation = 0.75f,
                 ShadowEnabled = !_semSombra,
                 ShadowBias = 0.06f,
-                ShadowNormalBias = 2.0f
+                ShadowNormalBias = 2.0f,
+                // o facho pesa na poeira mais do que ilumina a parede: e o
+                // cone no ar que se quer ver, nao um circulo mais claro no chao
+                LightVolumetricFogEnergy = 3.4f
             };
             _camera.AddChild(_lanterna);
 
@@ -415,7 +464,13 @@ namespace TurnoDaNoite.Jogo
                 LightColor = new Color(0.35f, 0.40f, 0.55f),
                 LightEnergy = 1.6f,
                 OmniRange = 6f,
-                ShadowEnabled = false
+                ShadowEnabled = false,
+                // NAO acende a poeira. Ele é uma luz azulada presa à câmera, só
+                // para o escuro total não virar tela preta; com a névoa
+                // volumétrica ele passou a arrastar uma nuvem azul em volta do
+                // jogador, que andava junto com ele. Ele ilumina superfície,
+                // não ar.
+                LightVolumetricFogEnergy = 0f
             };
             _camera.AddChild(_lampiao);
         }
@@ -537,8 +592,11 @@ namespace TurnoDaNoite.Jogo
             Girar(esqueleto, "upperarm_L", GiroDoBracoEsquerdo);
             Girar(esqueleto, "forearm_L", GiroDoAntebracoEsquerdo);
 
-            PorAsLuvas(esqueleto, "_R");
-            PorAsLuvas(esqueleto, "_L");
+            if (ComPunhoDeCouro)
+            {
+                PorAsLuvas(esqueleto, "_R");
+                PorAsLuvas(esqueleto, "_L");
+            }
 
             var preso = new BoneAttachment3D { Name = "PunhoDireito", BoneName = "hand_R" };
             esqueleto.AddChild(preso);
@@ -594,7 +652,7 @@ namespace TurnoDaNoite.Jogo
         /// tem geometria de braço atrás da câmera, e sem isto ela aparece
         /// cortada pelo plano de corte, pelo avesso.
         /// </summary>
-        static readonly Vector3 PoseDosBracos = new Vector3(0.15f, -0.07f, -0.32f);
+        static readonly Vector3 PoseDosBracos = new Vector3(0.11f, -0.05f, -0.30f);
         /// <summary>Inclina os dois para baixo: o modelo vem com os braços na horizontal, e mão na altura do olho lê como zumbi.</summary>
         static readonly Vector3 GiroDosBracos = new Vector3(-18f, 0f, 0f);
         const float EscalaDosBracos = 1f;
@@ -632,7 +690,10 @@ namespace TurnoDaNoite.Jogo
             new Vector3(  0.0f, -25.8f,  0.0f)
         };
         /// <summary>Quanto do punho cerrado cada mão faz.</summary>
-        const float ForcaDaGarra = 0.72f;
+        /// 0,72 fechava a mão numa bola, e bola não tem dedo: a referência é
+        /// de mão ABERTA, com os quatro dedos separados e cada um com forma
+        /// própria. 0,42 ainda dá a volta no cano e deixa os dedos se lerem.
+        const float ForcaDaGarra = 0.54f;
         const float ForcaDaMaoLivre = 0.26f;
 
         /// <summary>
@@ -644,8 +705,12 @@ namespace TurnoDaNoite.Jogo
         static readonly Vector3 GiroDaLanterna = new Vector3(0f, -90f, 0f);
 
         /// <summary>Ombro e cotovelo de cada lado. É o que tira os dois braços da mesma altura.</summary>
-        static readonly Vector3 GiroDoBracoDireito = new Vector3(16f, -14f, 0f);
-        static readonly Vector3 GiroDoAntebracoDireito = new Vector3(12f, 0f, 0f);
+        /// O giro em Z é o que importa: ele rola o braço e põe a mão de TRÊS
+        /// QUARTOS. Em zero, o que a câmera via era o dorso da mão quase de
+        /// topo — o pior ângulo que existe para uma mão, porque os dedos ficam
+        /// um atrás do outro e somem num naco só.
+        static readonly Vector3 GiroDoBracoDireito = new Vector3(14f, -16f, -34f);
+        static readonly Vector3 GiroDoAntebracoDireito = new Vector3(10f, 0f, -12f);
         // a esquerda cai para fora do quadro: mão que não faz nada e aparece
         // pela metade na borda de baixo lê como falha de desenho, não como braço
         static readonly Vector3 GiroDoBracoEsquerdo = new Vector3(-26f, 20f, 0f);
@@ -751,18 +816,28 @@ namespace TurnoDaNoite.Jogo
                 }
         }
 
+        /// <summary>
+        /// O punho de couro entrou para tapar o caroço do pulso, quando a
+        /// guinada da mão era de sessenta graus e amassava a pele do dorso.
+        /// Com a guinada em vinte e quatro o caroço encolheu, e a referência
+        /// que o Paulo mandou é de BRAÇO NU — então o couro sai. Fica a chave
+        /// porque o defeito que ele tapava continua existindo no modelo: se
+        /// algum dia a mão voltar a torcer muito, ele volta.
+        /// </summary>
+        const bool ComPunhoDeCouro = false;
+
         /// <summary>Onde fica a boca da luva, em fração do antebraço. Passa de 1 para engolir o pulso.</summary>
         // Passa de 1 para ENGOLIR o pulso. Parada em cima da junta, a boca da
         // luva deixava o caroço do pulso aparecendo logo à frente dela, e o
         // couro em volta só servia de moldura para o defeito.
         const float BocaDaLuva = 1.13f;
         /// <summary>Quanto do antebraço a luva cobre. O resto, do cotovelo para trás, sai de quadro.</summary>
-        const float FatiaDoAntebraco = 0.56f;
+        const float FatiaDoAntebraco = 0.46f;
         const float RaioDaLuvaNoPulso = 0.047f;
         // A luva aponta para a câmera, então a ponta grossa fica a meio metro
         // do olho e a perspectiva engorda ela três vezes. Catorze centímetros
         // de diâmetro, que é uma luva de solda normal, enchiam um terço da tela.
-        const float RaioDaLuvaNoCotovelo = 0.056f;
+        const float RaioDaLuvaNoCotovelo = 0.050f;
 
         /// <summary>
         /// Acerta a pele das mãos.
@@ -777,32 +852,50 @@ namespace TurnoDaNoite.Jogo
         /// </summary>
         void VestirMaos(Node3D raiz)
         {
+            // O modelo JÁ traz a pele pintada nas CORES DE VÉRTICE — tom quente,
+            // mais vermelho nas pontas dos dedos, sombreado nas dobras. O difuso
+            // do material vem branco, então quem não ligar `VertexColorUseAsAlbedo`
+            // recebe duas mãos brancas chapadas.
+            var pele = new StandardMaterial3D
+            {
+                VertexColorUseAsAlbedo = true,
+                AlbedoColor = new Color(TomDaPele, TomDaPele, TomDaPele),
+                Metallic = 0f,
+
+                // Pele não é fosca nem polida: tem um brilho LARGO e fraco, da
+                // gordura da superfície. Em 0,80 a mão lia como barro; abaixo de
+                // 0,40 vira plástico molhado.
+                Roughness = 0.52f,
+                SpecularMode = BaseMaterial3D.SpecularModeEnum.SchlickGgx,
+
+                // E isto é o que separa pele de qualquer outro material: a luz
+                // ATRAVESSA ela. Num dedo contra a luz, a borda acende em
+                // vermelho, porque está passando sangue na frente da lâmpada.
+                // Sem isso, mão é um objeto cor de pele; com isso, é carne.
+                SubsurfScatterEnabled = true,
+                SubsurfScatterSkinMode = true,
+                SubsurfScatterStrength = 0.55f,
+                SubsurfScatterTransmittanceEnabled = true,
+                SubsurfScatterTransmittanceColor = new Color(0.78f, 0.28f, 0.22f),
+                SubsurfScatterTransmittanceDepth = 0.035f,
+                SubsurfScatterTransmittanceBoost = 0.35f
+            };
+
             foreach (var n in TodosOsNos(raiz))
             {
                 if (n is not MeshInstance3D mi || mi.Mesh == null) continue;
                 for (int i = 0; i < mi.Mesh.GetSurfaceCount(); i++)
-                {
-                    var m = mi.Mesh.SurfaceGetMaterial(i) is StandardMaterial3D vindo
-                        ? (StandardMaterial3D)vindo.Duplicate()
-                        : new StandardMaterial3D();
-                    m.VertexColorUseAsAlbedo = true;
-                    // as cores de vértice já trazem sombreado pintado; o difuso
-                    // aqui só tira o excesso de brilho que a luz de mão daria
-                    m.AlbedoColor = new Color(TomDaPele, TomDaPele, TomDaPele);
-                    m.Roughness = 0.80f;
-                    m.Metallic = 0f;
-                    mi.SetSurfaceOverrideMaterial(i, m);
-                }
+                    mi.SetSurfaceOverrideMaterial(i, pele);
             }
         }
 
         /// <summary>
-        /// Escurece a pele. As cores de vértice do modelo foram pintadas para
-        /// luz de dia; num prédio às escuras a mão saltava rosada no meio de
-        /// uma cena que é toda marrom e preta — a coisa mais clara da tela era
-        /// o braço do jogador.
+        /// Quanto a pele escurece. As cores de vértice do modelo foram pintadas
+        /// para luz de dia; num prédio às escuras, em 1,0 a mão saltava rosada
+        /// no meio de uma cena toda marrom e preta. Em 0,58 ela virava barro:
+        /// 0,76 é pele que ainda é pele.
         /// </summary>
-        const float TomDaPele = 0.58f;
+        const float TomDaPele = 0.92f;
 
         static T PrimeiroDoTipo<T>(Node raiz) where T : Node
         {
@@ -845,7 +938,10 @@ namespace TurnoDaNoite.Jogo
             var fill = new DirectionalLight3D
             {
                 Name = "LuzDaMao",
-                LightColor = new Color(1f, 0.94f, 0.86f),
+                // Quase branca. Em (1 / 0,94 / 0,86) ela era luz de lâmpada
+                // velha, e somada à cor de vértice (que já é quente) dava uma
+                // mão cor de tijolo. A referência é pele CLARA, rosada.
+                LightColor = new Color(1f, 0.975f, 0.955f),
                 // 1,35 dava cinza medio num albedo de 0,10: com exposicao filmica
                 // a conta e mais generosa do que a intuicao sugere
                 LightEnergy = 0.58f,
@@ -854,7 +950,11 @@ namespace TurnoDaNoite.Jogo
             };
             // de cima, da esquerda e um pouco de trás: é a direção que separa
             // o dorso dos dedos e deixa o lado de baixo na sombra
-            fill.RotationDegrees = new Vector3(-38f, 28f, 0f);
+            // Raspando, e não de frente. De frente (28°) a mão recebia luz
+            // chapada e virava um naco só: luva escura iluminada de frente é
+            // uma mancha preta. A 64° a luz corre PELA ARESTA dos dedos, e é o
+            // risco de luz em cada um que faz o olho contar quatro dedos.
+            fill.RotationDegrees = new Vector3(-26f, 64f, 0f);
             _camera.AddChild(fill);
             _luzDaMao = fill;
 
@@ -862,12 +962,14 @@ namespace TurnoDaNoite.Jogo
             var contra = new DirectionalLight3D
             {
                 Name = "ContraLuzDaMao",
-                LightColor = new Color(0.62f, 0.68f, 0.85f),
-                LightEnergy = 0.15f,
+                LightColor = new Color(0.70f, 0.74f, 0.86f),
+                // é a luz que separa a silhueta do fundo preto. Sem ela, braço
+                // escuro em corredor escuro some
+                LightEnergy = 0.42f,
                 ShadowEnabled = false,
                 LightCullMask = CamadaDaMao
             };
-            contra.RotationDegrees = new Vector3(34f, -140f, 0f);
+            contra.RotationDegrees = new Vector3(18f, -132f, 0f);
             _camera.AddChild(contra);
         }
 
@@ -1073,6 +1175,7 @@ namespace TurnoDaNoite.Jogo
                         LightEnergy = 3.2f,
                         OmniRange = 16f,
                         OmniAttenuation = 1.1f,
+                        LightVolumetricFogEnergy = 1.8f,
                         ShadowEnabled = true,
                         DistanceFadeBegin = 26f,
                         DistanceFadeLength = 8f,
@@ -1324,23 +1427,25 @@ namespace TurnoDaNoite.Jogo
                 });
 
                 // a folha, escancarada contra a parede, e a maçaneta
+                // dobradiça, abertura e largura saem de Regras: o núcleo põe a
+                // colisão da folha lendo os mesmos números
                 var folha = new Node3D
                 {
-                    Position = new Vector3(-(larguraVao / 2 + 0.08f), 0, 0.14f)
+                    Position = new Vector3(-Regras.MeioVaoDaPorta, 0, Regras.RecuoDaFolha)
                 };
-                folha.RotateY(-1.42f);
+                folha.RotateY(-Regras.AberturaDaFolha);
                 folha.AddChild(new MeshInstance3D
                 {
-                    Mesh = new BoxMesh { Size = new Vector3(larguraVao * 0.92f, alturaVao - 0.06f, 0.05f) },
+                    Mesh = new BoxMesh { Size = new Vector3(Regras.LarguraDaFolha, alturaVao - 0.06f, 0.05f) },
                     MaterialOverride = folhaMat,
-                    Position = new Vector3(larguraVao * 0.46f, (alturaVao - 0.06f) / 2, 0),
+                    Position = new Vector3(Regras.LarguraDaFolha / 2f, (alturaVao - 0.06f) / 2, 0),
                     CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
                 });
                 folha.AddChild(new MeshInstance3D
                 {
                     Mesh = new CylinderMesh { TopRadius = 0.022f, BottomRadius = 0.022f, Height = 0.12f, RadialSegments = 8 },
                     MaterialOverride = batenteMat,
-                    Position = new Vector3(larguraVao * 0.84f, 1.02f, 0.05f),
+                    Position = new Vector3(Regras.LarguraDaFolha * 0.91f, 1.02f, 0.05f),
                     CastShadow = GeometryInstance3D.ShadowCastingSetting.Off
                 });
                 no.AddChild(folha);
@@ -1709,10 +1814,16 @@ namespace TurnoDaNoite.Jogo
             {
                 Node3D no = a.Tipo switch
                 {
-                    TipoAdorno.Caixote => Props.Criar(Peca.Caixote, new Vector3(0.85f, 0.8f, 0.85f), _matArmario),
-                    TipoAdorno.Barril => Props.Criar(Peca.Barril, new Vector3(0.72f, 0.95f, 0.72f), _matArmario),
-                    TipoAdorno.Bancada => Props.Criar(Peca.Bancada, Vector3.One, _matArmario),
-                    TipoAdorno.Pilha => Props.Criar(Peca.Pilha, Vector3.One, _matArmario),
+                    // A pegada sai do RAIO, e não de uma caixa escolhida à parte:
+                    // eram dois números para a mesma coisa, e eles divergiram.
+                    // A pilha enchia um metro com quarenta de colisão, o barril
+                    // enchia vinte e quatro com setenta e seis.
+                    // o teto de altura é generoso: apertado, ele é que passa a
+                    // mandar no tamanho, e a pegada volta a ficar menor que o raio
+                    TipoAdorno.Caixote => Props.CriarComPegada(Peca.Caixote, Pegada(a), 1.20f, _matArmario),
+                    TipoAdorno.Barril => Props.CriarComPegada(Peca.Barril, Pegada(a), 1.10f, _matArmario),
+                    TipoAdorno.Bancada => Props.CriarComPegada(Peca.Bancada, Pegada(a), 1.05f, _matArmario),
+                    TipoAdorno.Pilha => Props.CriarComPegada(Peca.Pilha, Pegada(a), 1.15f, _matArmario),
                     TipoAdorno.Entulho => Props.Criar(Peca.Entulho, Vector3.One, _matArmario),
                     TipoAdorno.CanoParede => Modelos.CanoParede(),
                     _ => Modelos.CanoTeto(ComprimentoDoCano(a.Pos))
@@ -1733,6 +1844,13 @@ namespace TurnoDaNoite.Jogo
         }
 
         /// <summary>O nó de cena de um adorno, achado pela posição. Só o diagnóstico usa.</summary>
+        /// <summary>
+        /// Largura que o móvel pode ocupar no chão: o diâmetro da colisão,
+        /// menos quatro centímetros. A folga vai para dentro de propósito —
+        /// se errar, que sobre colisão em vez de faltar.
+        /// </summary>
+        static float Pegada(Adorno a) => Mathf.Max(0.1f, a.Raio * 2f - 0.04f);
+
         Node3D AcharNoDoAdorno(Adorno a)
         {
             if (!_raizPorAndar.TryGetValue(a.Andar, out var raiz)) return null;
@@ -1743,16 +1861,27 @@ namespace TurnoDaNoite.Jogo
             return null;
         }
 
+        /// <summary>
+        /// Tamanho do que aparece na tela, no espaço da raiz.
+        ///
+        /// A versão anterior multiplicava a caixa pela escala DO PRÓPRIO nó, e
+        /// quem carrega a escala num modelo importado é o pai: `Props` escala
+        /// a raiz da cena, não cada malha. Resultado: caixote e barril eram
+        /// medidos crus, 11 e 12 centímetros, e o relatório dizia que sobrava
+        /// colisão de trinta centímetros onde na verdade faltava. Levar a
+        /// transformação inteira é o único jeito que também acerta quando a
+        /// peça vem girada.
+        /// </summary>
         static Aabb MedirNo(Node3D raiz)
         {
             var total = new Aabb();
             bool primeiro = true;
+            var paraRaiz = raiz.GlobalTransform.AffineInverse();
+
             foreach (var n in TodosOsNos(raiz))
             {
                 if (n is not VisualInstance3D v) continue;
-                var c = v.GetAabb();
-                // leva a escala do nó em conta, senão mede o modelo cru
-                c = new Aabb(c.Position * v.Scale, c.Size * v.Scale);
+                var c = (paraRaiz * v.GlobalTransform) * v.GetAabb();
                 if (primeiro) { total = c; primeiro = false; } else total = total.Merge(c);
             }
             return total;
@@ -2423,18 +2552,43 @@ namespace TurnoDaNoite.Jogo
             // jogador atravessar a metade de um movel e chamar de bug. Roda
             // sempre, para a proxima peca que entrar torta ser reprovada aqui
             // e nao na mao de quem joga.
-            var tortos = new List<string>();
-            foreach (var a in _partida.Adornos)
+            // A folga de 25 cm que estava aqui antes não media nada: um móvel
+            // com meio metro de largura e 44 cm de raio passava, e meio metro
+            // de largura com 44 de raio É atravessar o móvel pela quina. Agora
+            // a folga é de 6 cm, e o relatório sai sempre, com números: quando
+            // alguém reclamar de atravessar móvel, dá para apontar qual.
+            const float FolgaDaColisao = 0.06f;
+            var medido = new Dictionary<string, (float meia, float raio)>();
+
+            void Medir(string nome, Node3D no, float raio)
             {
-                if (!a.Solido) continue;
-                var no = AcharNoDoAdorno(a);
-                if (no == null) continue;
-                float meiaLargura = Mathf.Max(MedirNo(no).Size.X, MedirNo(no).Size.Z) / 2f;
-                if (meiaLargura > a.Raio + 0.25f) tortos.Add(a.Tipo.ToString());
+                if (no == null) return;
+                var caixa = MedirNo(no);
+                float meia = Mathf.Max(caixa.Size.X, caixa.Size.Z) / 2f;
+                if (!medido.TryGetValue(nome, out var antes) || meia - raio > antes.meia - antes.raio)
+                    medido[nome] = (meia, raio);
+            }
+
+            foreach (var a in _partida.Adornos)
+                if (a.Solido) Medir(a.Tipo.ToString(), AcharNoDoAdorno(a), a.Raio);
+            for (int i = 0; i < _recipientes.Count && i < _partida.Recipientes.Count; i++)
+                Medir(_partida.Recipientes[i].Tipo.ToString(), _recipientes[i].Raiz,
+                      Regras.RaioDoRecipiente(_partida.Recipientes[i].Tipo));
+            foreach (var arm in _armarios)
+                Medir("Armario", arm.Raiz, Regras.RaioArmario);
+
+            var tortos = new List<string>();
+            GD.Print("  corpo dos moveis (meia largura na tela / raio que colide):");
+            foreach (var par in medido.OrderByDescending(x => x.Value.meia - x.Value.raio))
+            {
+                float sobra = par.Value.meia - par.Value.raio;
+                bool cabe = sobra <= FolgaDaColisao;
+                if (!cabe) tortos.Add(par.Key);
+                GD.Print($"    {(cabe ? " " : "!")} {par.Key,-18} {par.Value.meia:0.00} m / {par.Value.raio:0.00} m  sobra {sobra * 100f:+0;-0} cm");
             }
             Checar(tortos.Count == 0
                 ? "todo movel colide do tamanho que aparece"
-                : "movel maior na tela do que na colisao: " + string.Join(", ", tortos.Distinct()),
+                : "movel maior na tela do que na colisao: " + string.Join(", ", tortos),
                 tortos.Count == 0);
 
             // A mão. Ela fica em quadro do primeiro ao último segundo de

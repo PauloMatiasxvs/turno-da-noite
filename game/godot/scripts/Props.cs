@@ -155,6 +155,50 @@ namespace TurnoDaNoite.Jogo
         }
 
         /// <summary>
+        /// Cria a peça com a PEGADA que o jogo reservou: a largura no chão
+        /// passa a ser exatamente <paramref name="largura"/>.
+        ///
+        /// É o que móvel de cenário precisa, e o encaixe na caixa não dá.
+        /// Encaixar usa a mais apertada das três dimensões, então um modelo
+        /// mais alto do que largo — que é quase todo móvel — sai do tamanho
+        /// que a ALTURA permitir, e a pegada fica menor que o reservado. Um
+        /// barril do Kenney virava um barrilzinho de 24 centímetros com uma
+        /// bolha de colisão de 76: você esbarrava no nada.
+        ///
+        /// Quem manda no tamanho é o núcleo, e não o arquivo do artista: o
+        /// raio de colisão é decisão de jogo, testada, e o desenho obedece.
+        /// A altura entra só como teto, para um modelo desengonçado não sair
+        /// furando a laje.
+        /// </summary>
+        public static Node3D CriarComPegada(Peca peca, float largura, float alturaMaxima, Material fallback)
+        {
+            var recipiente = new Node3D();
+            var cena = Carregar(peca);
+
+            if (cena == null)
+            {
+                recipiente.AddChild(Primitiva(peca,
+                    new Vector3(largura, alturaMaxima, largura), fallback));
+                return recipiente;
+            }
+
+            var no = cena.Instantiate<Node3D>();
+            var aabb = CalcularAabb(no);
+            float pegada = Mathf.Max(aabb.Size.X, aabb.Size.Z);
+            if (pegada > 0.0001f && aabb.Size.Y > 0.0001f)
+            {
+                float escala = largura / pegada;
+                // teto de altura: encolher deixa a pegada MENOR que o raio, que
+                // é o lado seguro do erro — sobra colisão, não falta
+                if (aabb.Size.Y * escala > alturaMaxima) escala = alturaMaxima / aabb.Size.Y;
+                no.Scale = new Vector3(escala, escala, escala);
+                no.Position = new Vector3(0, -aabb.Position.Y * escala, 0);
+            }
+            recipiente.AddChild(no);
+            return recipiente;
+        }
+
+        /// <summary>
         /// Escala o modelo importado para caber na caixa que o jogo reservou.
         /// Sem isto, um modelo baixado em centímetros vira um monstro de 200 m.
         /// </summary>
@@ -170,17 +214,37 @@ namespace TurnoDaNoite.Jogo
             no.Position = new Vector3(0, -aabb.Position.Y * escala, 0);
         }
 
+        /// <summary>
+        /// Tamanho do modelo como ele vai aparecer, no espaço da raiz.
+        ///
+        /// As transformações DE DENTRO do arquivo contam, e essa é a parte
+        /// que faltava: um `.glb` guarda a escala nos nós da cena, não na
+        /// malha, então somar `GetAabb()` cru mede o modelo como o artista o
+        /// desenhou e não como ele fica. Era por isso que um barril de meio
+        /// metro entrava no jogo com vinte e oito centímetros: a conta de
+        /// escala partia de uma medida que nunca existiu na tela.
+        ///
+        /// A transformação da PRÓPRIA raiz fica de fora de propósito — quem
+        /// chama vai sobrescrever ela logo em seguida.
+        /// </summary>
         static Aabb CalcularAabb(Node3D raiz)
         {
             var total = new Aabb();
             bool primeiro = true;
-            foreach (var filho in Todos(raiz))
+
+            void Somar(Node no, Transform3D ate)
             {
-                if (filho is not VisualInstance3D vis) continue;
-                var caixa = vis.GetAabb();
-                if (primeiro) { total = caixa; primeiro = false; }
-                else total = total.Merge(caixa);
+                if (no is VisualInstance3D vis)
+                {
+                    var caixa = ate * vis.GetAabb();
+                    if (primeiro) { total = caixa; primeiro = false; }
+                    else total = total.Merge(caixa);
+                }
+                foreach (var filho in no.GetChildren())
+                    Somar(filho, filho is Node3D n ? ate * n.Transform : ate);
             }
+
+            Somar(raiz, Transform3D.Identity);
             return total;
         }
 

@@ -435,19 +435,49 @@ namespace TurnoDaNoite.Core
                         Solidos.Add(new Solido(new P2(m.X + dx, m.Z + dz), andar,
                                                Regras.RaioDoBatente, soParaOJogador: true));
                     }
+
+                    // A FOLHA. Um painel de 1,24 m de pé dentro do cômodo, ao
+                    // lado de cada uma das dezenas de portas do prédio, e era
+                    // desenho puro: atravessava-se ela como quem atravessa
+                    // fumaça. O vão em si continua livre — a folha fica FORA
+                    // dele, encostada na parede, que é onde uma porta aberta
+                    // está.
+                    float cos = MathF.Cos(Regras.AberturaDaFolha);
+                    float sen = MathF.Sin(Regras.AberturaDaFolha);
+                    for (int i = 0; i < Regras.PostesDaFolha; i++)
+                    {
+                        float t = (i + 0.5f) / Regras.PostesDaFolha;
+                        float fx = -Regras.MeioVaoDaPorta + t * Regras.LarguraDaFolha * cos;
+                        float fz = Regras.RecuoDaFolha + t * Regras.LarguraDaFolha * sen;
+                        // porta no eixo Z: quem desenha gira a célula um quarto
+                        // de volta, e (x,z) vira (z,-x)
+                        var d = noEixoX ? new P2(fx, fz) : new P2(fz, -fx);
+                        Solidos.Add(new Solido(new P2(m.X + d.X, m.Z + d.Z), andar,
+                                               Regras.RaioDaFolha, soParaOJogador: true));
+                    }
                 }
 
-            // Os MONTANTES do lance de escada, dos dois lados. O poço em si
-            // fica livre: pisar nele é o que troca de andar, e bloquear a
-            // entrada deixaria o andar de cima inalcançável. O que se ganha é
-            // não atravessar o lance de lado, como se ele não estivesse lá.
+            // As LATERAIS do lance de escada. O poço em si fica livre pelas
+            // duas pontas — pisar nele é o que troca de andar, e fechar a
+            // entrada deixaria o andar de cima inalcançável — mas os flancos
+            // não.
+            //
+            // Eram DOIS pontos, um de cada lado, no meio da célula. A viga do
+            // lance tem três metros e o ponto cobria meio: sobravam mais de
+            // dois metros de escada que se atravessava de lado, andando. Agora
+            // é uma fileira de círculos encostados, do começo ao fim da viga.
             foreach (var e in Predio.Escadas)
                 foreach (int andar in new[] { e.De, e.Para })
                 {
                     var m = Predio.ParaMundo(new Celula(e.Cx, e.Cz, andar));
                     foreach (float lado in new[] { -1f, 1f })
-                        Solidos.Add(new Solido(new P2(m.X + lado * Regras.MeioLanceDaEscada, m.Z),
-                                               andar, Regras.RaioDoMontante, soParaOJogador: true));
+                        for (int i = 0; i < Regras.PostesDoLance; i++)
+                        {
+                            float t = (i + 0.5f) / Regras.PostesDoLance - 0.5f;
+                            Solidos.Add(new Solido(
+                                new P2(m.X + lado * Regras.MeioLanceDaEscada, m.Z + t * Predio.Celula),
+                                andar, Regras.RaioDoMontante, soParaOJogador: true));
+                        }
                 }
         }
 

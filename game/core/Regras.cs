@@ -161,9 +161,33 @@ namespace TurnoDaNoite.Core
         public const float MeioVaoDaPorta = 0.755f;
         public const float RaioDoBatente = 0.22f;
 
+        /// <summary>
+        /// A folha da porta, escancarada contra a parede.
+        ///
+        /// Os números ficam aqui, e não em quem desenha, porque são lidos
+        /// pelos dois lados: o Godot põe a folha onde eles mandam e o núcleo
+        /// põe a colisão no mesmo lugar. Separados, eles divergem — foi
+        /// exatamente assim que o barril acabou com 24 cm de desenho e 76 de
+        /// corpo.
+        /// </summary>
+        public const float LarguraDaFolha = 1.242f;
+        /// <summary>Quanto a dobradiça recua para dentro do cômodo.</summary>
+        public const float RecuoDaFolha = 0.14f;
+        /// <summary>Abertura em radianos. 1,42 é quase 90°: quase encostada na parede.</summary>
+        public const float AberturaDaFolha = 1.42f;
+        public const float RaioDaFolha = 0.22f;
+        /// <summary>Círculos que dão corpo à folha. Três se encostam ao longo de 1,24 m.</summary>
+        public const int PostesDaFolha = 3;
+
         /// <summary>Montantes do lance de escada. O meio fica livre: pisar nele é o que troca de andar.</summary>
         public const float MeioLanceDaEscada = 0.93f;
         public const float RaioDoMontante = 0.24f;
+        /// <summary>
+        /// Quantos círculos formam cada lateral do lance. Com um só, no meio,
+        /// meio metro de viga colidia e dois e meio não — dava para atravessar
+        /// a escada de lado, andando. Sete, com raio 0,24, se encostam.
+        /// </summary>
+        public const int PostesDoLance = 7;
 
         /// <summary>
         /// A folha da porta da frente, quando fechada. Larga: e uma porta de
@@ -173,12 +197,22 @@ namespace TurnoDaNoite.Core
         /// <summary>Altura dela, em metros. Mais alta que gente, e é para ser.</summary>
         public const float AlturaDaCriatura = 2.35f;
 
+        /// <summary>
+        /// Raio de cada móvel que se revista. Os três números são medidos
+        /// contra o que `Modelos` desenha, e o auto-teste do Godot cobra isso
+        /// a cada partida: móvel mais largo na tela do que na colisão é móvel
+        /// que se atravessa pela quina, e mais estreito é parede invisível.
+        /// </summary>
         public static float RaioDoRecipiente(TipoRecipiente t) => t switch
         {
             // caixa de ferramentas é baixa e pequena, mas você não passa por cima
             TipoRecipiente.CaixaDeFerramentas => 0.32f,
-            TipoRecipiente.Gaveteiro => 0.42f,
-            _ => 0.58f    // prateleira: 1,3 m de frente
+            // era 0,42 para um móvel de 66 cm de frente: nove centímetros de
+            // parede invisível em volta do gaveteiro
+            TipoRecipiente.Gaveteiro => 0.36f,
+            // era 0,58 para uma estante de 1,30 m: sete centímetros de estante
+            // ficavam do lado de fora da colisão, e a quina se atravessava
+            _ => 0.66f
         };
         public const float RaioInteracao = 2.4f;
         /// <summary>Distância mínima entre onde a criatura nasce e onde você nasce.</summary>
