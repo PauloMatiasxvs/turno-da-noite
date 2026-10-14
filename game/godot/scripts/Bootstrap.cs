@@ -352,7 +352,51 @@ namespace TurnoDaNoite.Jogo
                 FogLightColor = new Color(0.03f, 0.032f, 0.045f),
                 FogDensity = 0.008f,
                 GlowEnabled = true,
-                GlowIntensity = 0.35f,
+                GlowIntensity = 0.55f,
+                GlowBloom = 0.15f,
+
+                // ---- NÉVOA VOLUMÉTRICA
+                //
+                // A coisa que mais faltava, e não era modelo nenhum.
+                //
+                // Até aqui o jogo tinha um círculo de luz no chão e nada entre a
+                // lanterna e ele: o ar era vazio. Lanterna de jogo de terror
+                // não é um círculo, é um CONE que se vê no ar, porque o lugar
+                // tem poeira. É isso que faz o facho virar objeto em vez de
+                // mancha, que dá volume ao escuro em volta dele, e que separa
+                // o fundo do primeiro plano sem precisar iluminar nada.
+                //
+                // A anisotropia é o detalhe que importa: positiva, a poeira
+                // espalha a luz PARA A FRENTE, e o cone fica brilhante quando
+                // você olha na direção dele e discreto quando olha de lado —
+                // que é como poeira se comporta. Em zero o ar inteiro acende
+                // por igual e a cena vira leite.
+                VolumetricFogEnabled = true,
+                // 0,022 enchia o ar inteiro por igual e o prédio virava leite
+                // cinzento: o escuro sumia, e com ele o jogo. Em terror a graça
+                // é o contraste — poça de luz dentro de preto —, então a poeira
+                // tem de ser pouca e só acender onde a luz bate forte.
+                VolumetricFogDensity = 0.009f,
+                VolumetricFogAlbedo = new Color(0.70f, 0.71f, 0.76f),
+                VolumetricFogEmission = new Color(0f, 0f, 0f),
+                VolumetricFogAnisotropy = 0.55f,
+                VolumetricFogLength = 48f,
+                VolumetricFogDetailSpread = 2.2f,
+                // zero: injetar ambiente na poeira é justamente o que a deixa cinza uniforme
+                VolumetricFogAmbientInject = 0f,
+
+                // ---- OCLUSÃO DE CONTATO
+                //
+                // Sombra curta onde as coisas se encontram: pé do armário com
+                // o chão, quina da parede com o teto, a caixa encostada no
+                // rodapé. Sem isso tudo parece colado por cima da cena em vez
+                // de apoiado nela — é metade do que faz uma maquete parecer
+                // maquete, e custa mais barato que qualquer modelo novo.
+                SsaoEnabled = true,
+                SsaoRadius = 0.9f,
+                SsaoIntensity = 2.2f,
+                SsaoPower = 1.4f,
+                SsaoLightAffect = 0.25f,
 
                 // Calibrado com captura de tela. A combinação anterior — ACES com
                 // exposição 1 mais AdjustmentContrast/Saturation ligados — comia
@@ -369,13 +413,15 @@ namespace TurnoDaNoite.Jogo
                 TonemapExposure = 1.15f,
                 AdjustmentEnabled = false
             };
-            if (_semNevoa) env.FogEnabled = false;
+            if (_semNevoa) { env.FogEnabled = false; env.VolumetricFogEnabled = false; }
             if (_diagnostico)
             {
                 env.BackgroundColor = new Color(1f, 0f, 1f);
                 env.AmbientLightColor = new Color(1f, 1f, 1f);
                 env.AmbientLightEnergy = 0.0f;   // so a lanterna ilumina
                 env.FogEnabled = false;
+                env.VolumetricFogEnabled = false;
+                env.SsaoEnabled = false;
             }
             if (!_semAmbiente) AddChild(new WorldEnvironment { Environment = env });
 
@@ -402,7 +448,10 @@ namespace TurnoDaNoite.Jogo
                 SpotAttenuation = 0.75f,
                 ShadowEnabled = !_semSombra,
                 ShadowBias = 0.06f,
-                ShadowNormalBias = 2.0f
+                ShadowNormalBias = 2.0f,
+                // o facho pesa na poeira mais do que ilumina a parede: e o
+                // cone no ar que se quer ver, nao um circulo mais claro no chao
+                LightVolumetricFogEnergy = 3.4f
             };
             _camera.AddChild(_lanterna);
 
@@ -1073,6 +1122,7 @@ namespace TurnoDaNoite.Jogo
                         LightEnergy = 3.2f,
                         OmniRange = 16f,
                         OmniAttenuation = 1.1f,
+                        LightVolumetricFogEnergy = 1.8f,
                         ShadowEnabled = true,
                         DistanceFadeBegin = 26f,
                         DistanceFadeLength = 8f,

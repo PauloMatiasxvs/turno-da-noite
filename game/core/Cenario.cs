@@ -83,12 +83,17 @@ namespace TurnoDaNoite.Core
                 var bordas = CelulasDeBorda(predio, sala);
                 Embaralhar(bordas, rng);
 
-                int quantos = Math.Max(3, bordas.Count / 3);
+                // Era bordas/3, com teto de 600 no prédio: dava três ou quatro
+                // peças num cômodo de oitenta metros quadrados, e cômodo vazio é
+                // o que mais rápido denuncia maquete — mais do que textura ruim
+                // ou modelo ruim. Cômodo de verdade tem coisa encostada em
+                // quase toda parede.
+                int quantos = Math.Max(5, bordas.Count / 2);
                 int postosNaSala = 0;
 
                 foreach (var (celula, normal) in bordas)
                 {
-                    if (lista.Count >= 600) break;
+                    if (lista.Count >= 1200) break;
                     // Cômodo pequeno tem poucas bordas boas, e a cota acabava
                     // antes de entrar qualquer coisa: sala vazia de novo. Enquanto
                     // não houver nada aqui dentro, insiste além da cota.
@@ -108,7 +113,7 @@ namespace TurnoDaNoite.Core
                     // de um gaveteiro, um caixote deixava 57 cm de vão, e o
                     // jogador tem 76 cm de largura
                     if (PertoDeAlgo(pos, sala.Andar, ocupado, 2.3f)) continue;
-                    if (PertoDeAdorno(pos, sala.Andar, lista, 1.7f)) continue;
+                    if (PertoDeAdorno(pos, sala.Andar, lista, 1.35f)) continue;
                     if (predio.EscadaEm(celula) != null) continue;   // o poço da escada fica livre
 
                     lista.Add(new Adorno
