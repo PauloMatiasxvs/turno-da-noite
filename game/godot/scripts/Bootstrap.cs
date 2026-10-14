@@ -464,7 +464,13 @@ namespace TurnoDaNoite.Jogo
                 LightColor = new Color(0.35f, 0.40f, 0.55f),
                 LightEnergy = 1.6f,
                 OmniRange = 6f,
-                ShadowEnabled = false
+                ShadowEnabled = false,
+                // NAO acende a poeira. Ele é uma luz azulada presa à câmera, só
+                // para o escuro total não virar tela preta; com a névoa
+                // volumétrica ele passou a arrastar uma nuvem azul em volta do
+                // jogador, que andava junto com ele. Ele ilumina superfície,
+                // não ar.
+                LightVolumetricFogEnergy = 0f
             };
             _camera.AddChild(_lampiao);
         }
@@ -643,7 +649,7 @@ namespace TurnoDaNoite.Jogo
         /// tem geometria de braço atrás da câmera, e sem isto ela aparece
         /// cortada pelo plano de corte, pelo avesso.
         /// </summary>
-        static readonly Vector3 PoseDosBracos = new Vector3(0.15f, -0.07f, -0.32f);
+        static readonly Vector3 PoseDosBracos = new Vector3(0.11f, -0.05f, -0.30f);
         /// <summary>Inclina os dois para baixo: o modelo vem com os braços na horizontal, e mão na altura do olho lê como zumbi.</summary>
         static readonly Vector3 GiroDosBracos = new Vector3(-18f, 0f, 0f);
         const float EscalaDosBracos = 1f;
@@ -693,8 +699,12 @@ namespace TurnoDaNoite.Jogo
         static readonly Vector3 GiroDaLanterna = new Vector3(0f, -90f, 0f);
 
         /// <summary>Ombro e cotovelo de cada lado. É o que tira os dois braços da mesma altura.</summary>
-        static readonly Vector3 GiroDoBracoDireito = new Vector3(16f, -14f, 0f);
-        static readonly Vector3 GiroDoAntebracoDireito = new Vector3(12f, 0f, 0f);
+        /// O giro em Z é o que importa: ele rola o braço e põe a mão de TRÊS
+        /// QUARTOS. Em zero, o que a câmera via era o dorso da mão quase de
+        /// topo — o pior ângulo que existe para uma mão, porque os dedos ficam
+        /// um atrás do outro e somem num naco só.
+        static readonly Vector3 GiroDoBracoDireito = new Vector3(14f, -16f, -34f);
+        static readonly Vector3 GiroDoAntebracoDireito = new Vector3(10f, 0f, -12f);
         // a esquerda cai para fora do quadro: mão que não faz nada e aparece
         // pela metade na borda de baixo lê como falha de desenho, não como braço
         static readonly Vector3 GiroDoBracoEsquerdo = new Vector3(-26f, 20f, 0f);
@@ -806,12 +816,12 @@ namespace TurnoDaNoite.Jogo
         // couro em volta só servia de moldura para o defeito.
         const float BocaDaLuva = 1.13f;
         /// <summary>Quanto do antebraço a luva cobre. O resto, do cotovelo para trás, sai de quadro.</summary>
-        const float FatiaDoAntebraco = 0.56f;
+        const float FatiaDoAntebraco = 0.46f;
         const float RaioDaLuvaNoPulso = 0.047f;
         // A luva aponta para a câmera, então a ponta grossa fica a meio metro
         // do olho e a perspectiva engorda ela três vezes. Catorze centímetros
         // de diâmetro, que é uma luva de solda normal, enchiam um terço da tela.
-        const float RaioDaLuvaNoCotovelo = 0.056f;
+        const float RaioDaLuvaNoCotovelo = 0.050f;
 
         /// <summary>
         /// Acerta a pele das mãos.
@@ -826,32 +836,50 @@ namespace TurnoDaNoite.Jogo
         /// </summary>
         void VestirMaos(Node3D raiz)
         {
+            // O modelo JÁ traz a pele pintada nas CORES DE VÉRTICE — tom quente,
+            // mais vermelho nas pontas dos dedos, sombreado nas dobras. O difuso
+            // do material vem branco, então quem não ligar `VertexColorUseAsAlbedo`
+            // recebe duas mãos brancas chapadas.
+            var pele = new StandardMaterial3D
+            {
+                VertexColorUseAsAlbedo = true,
+                AlbedoColor = new Color(TomDaPele, TomDaPele, TomDaPele),
+                Metallic = 0f,
+
+                // Pele não é fosca nem polida: tem um brilho LARGO e fraco, da
+                // gordura da superfície. Em 0,80 a mão lia como barro; abaixo de
+                // 0,40 vira plástico molhado.
+                Roughness = 0.52f,
+                SpecularMode = BaseMaterial3D.SpecularModeEnum.SchlickGgx,
+
+                // E isto é o que separa pele de qualquer outro material: a luz
+                // ATRAVESSA ela. Num dedo contra a luz, a borda acende em
+                // vermelho, porque está passando sangue na frente da lâmpada.
+                // Sem isso, mão é um objeto cor de pele; com isso, é carne.
+                SubsurfScatterEnabled = true,
+                SubsurfScatterSkinMode = true,
+                SubsurfScatterStrength = 0.55f,
+                SubsurfScatterTransmittanceEnabled = true,
+                SubsurfScatterTransmittanceColor = new Color(0.78f, 0.28f, 0.22f),
+                SubsurfScatterTransmittanceDepth = 0.035f,
+                SubsurfScatterTransmittanceBoost = 0.35f
+            };
+
             foreach (var n in TodosOsNos(raiz))
             {
                 if (n is not MeshInstance3D mi || mi.Mesh == null) continue;
                 for (int i = 0; i < mi.Mesh.GetSurfaceCount(); i++)
-                {
-                    var m = mi.Mesh.SurfaceGetMaterial(i) is StandardMaterial3D vindo
-                        ? (StandardMaterial3D)vindo.Duplicate()
-                        : new StandardMaterial3D();
-                    m.VertexColorUseAsAlbedo = true;
-                    // as cores de vértice já trazem sombreado pintado; o difuso
-                    // aqui só tira o excesso de brilho que a luz de mão daria
-                    m.AlbedoColor = new Color(TomDaPele, TomDaPele, TomDaPele);
-                    m.Roughness = 0.80f;
-                    m.Metallic = 0f;
-                    mi.SetSurfaceOverrideMaterial(i, m);
-                }
+                    mi.SetSurfaceOverrideMaterial(i, pele);
             }
         }
 
         /// <summary>
-        /// Escurece a pele. As cores de vértice do modelo foram pintadas para
-        /// luz de dia; num prédio às escuras a mão saltava rosada no meio de
-        /// uma cena que é toda marrom e preta — a coisa mais clara da tela era
-        /// o braço do jogador.
+        /// Quanto a pele escurece. As cores de vértice do modelo foram pintadas
+        /// para luz de dia; num prédio às escuras, em 1,0 a mão saltava rosada
+        /// no meio de uma cena toda marrom e preta. Em 0,58 ela virava barro:
+        /// 0,76 é pele que ainda é pele.
         /// </summary>
-        const float TomDaPele = 0.58f;
+        const float TomDaPele = 0.76f;
 
         static T PrimeiroDoTipo<T>(Node raiz) where T : Node
         {
@@ -903,7 +931,11 @@ namespace TurnoDaNoite.Jogo
             };
             // de cima, da esquerda e um pouco de trás: é a direção que separa
             // o dorso dos dedos e deixa o lado de baixo na sombra
-            fill.RotationDegrees = new Vector3(-38f, 28f, 0f);
+            // Raspando, e não de frente. De frente (28°) a mão recebia luz
+            // chapada e virava um naco só: luva escura iluminada de frente é
+            // uma mancha preta. A 64° a luz corre PELA ARESTA dos dedos, e é o
+            // risco de luz em cada um que faz o olho contar quatro dedos.
+            fill.RotationDegrees = new Vector3(-26f, 64f, 0f);
             _camera.AddChild(fill);
             _luzDaMao = fill;
 
@@ -912,11 +944,13 @@ namespace TurnoDaNoite.Jogo
             {
                 Name = "ContraLuzDaMao",
                 LightColor = new Color(0.62f, 0.68f, 0.85f),
-                LightEnergy = 0.15f,
+                // subiu de 0,15: é a luz que separa a silhueta da luva do
+                // fundo preto. Sem ela, luva escura em corredor escuro some
+                LightEnergy = 0.42f,
                 ShadowEnabled = false,
                 LightCullMask = CamadaDaMao
             };
-            contra.RotationDegrees = new Vector3(34f, -140f, 0f);
+            contra.RotationDegrees = new Vector3(18f, -132f, 0f);
             _camera.AddChild(contra);
         }
 
