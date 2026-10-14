@@ -592,8 +592,11 @@ namespace TurnoDaNoite.Jogo
             Girar(esqueleto, "upperarm_L", GiroDoBracoEsquerdo);
             Girar(esqueleto, "forearm_L", GiroDoAntebracoEsquerdo);
 
-            PorAsLuvas(esqueleto, "_R");
-            PorAsLuvas(esqueleto, "_L");
+            if (ComPunhoDeCouro)
+            {
+                PorAsLuvas(esqueleto, "_R");
+                PorAsLuvas(esqueleto, "_L");
+            }
 
             var preso = new BoneAttachment3D { Name = "PunhoDireito", BoneName = "hand_R" };
             esqueleto.AddChild(preso);
@@ -687,7 +690,10 @@ namespace TurnoDaNoite.Jogo
             new Vector3(  0.0f, -25.8f,  0.0f)
         };
         /// <summary>Quanto do punho cerrado cada mão faz.</summary>
-        const float ForcaDaGarra = 0.72f;
+        /// 0,72 fechava a mão numa bola, e bola não tem dedo: a referência é
+        /// de mão ABERTA, com os quatro dedos separados e cada um com forma
+        /// própria. 0,42 ainda dá a volta no cano e deixa os dedos se lerem.
+        const float ForcaDaGarra = 0.54f;
         const float ForcaDaMaoLivre = 0.26f;
 
         /// <summary>
@@ -810,6 +816,16 @@ namespace TurnoDaNoite.Jogo
                 }
         }
 
+        /// <summary>
+        /// O punho de couro entrou para tapar o caroço do pulso, quando a
+        /// guinada da mão era de sessenta graus e amassava a pele do dorso.
+        /// Com a guinada em vinte e quatro o caroço encolheu, e a referência
+        /// que o Paulo mandou é de BRAÇO NU — então o couro sai. Fica a chave
+        /// porque o defeito que ele tapava continua existindo no modelo: se
+        /// algum dia a mão voltar a torcer muito, ele volta.
+        /// </summary>
+        const bool ComPunhoDeCouro = false;
+
         /// <summary>Onde fica a boca da luva, em fração do antebraço. Passa de 1 para engolir o pulso.</summary>
         // Passa de 1 para ENGOLIR o pulso. Parada em cima da junta, a boca da
         // luva deixava o caroço do pulso aparecendo logo à frente dela, e o
@@ -879,7 +895,7 @@ namespace TurnoDaNoite.Jogo
         /// no meio de uma cena toda marrom e preta. Em 0,58 ela virava barro:
         /// 0,76 é pele que ainda é pele.
         /// </summary>
-        const float TomDaPele = 0.76f;
+        const float TomDaPele = 0.92f;
 
         static T PrimeiroDoTipo<T>(Node raiz) where T : Node
         {
@@ -922,7 +938,10 @@ namespace TurnoDaNoite.Jogo
             var fill = new DirectionalLight3D
             {
                 Name = "LuzDaMao",
-                LightColor = new Color(1f, 0.94f, 0.86f),
+                // Quase branca. Em (1 / 0,94 / 0,86) ela era luz de lâmpada
+                // velha, e somada à cor de vértice (que já é quente) dava uma
+                // mão cor de tijolo. A referência é pele CLARA, rosada.
+                LightColor = new Color(1f, 0.975f, 0.955f),
                 // 1,35 dava cinza medio num albedo de 0,10: com exposicao filmica
                 // a conta e mais generosa do que a intuicao sugere
                 LightEnergy = 0.58f,
@@ -943,9 +962,9 @@ namespace TurnoDaNoite.Jogo
             var contra = new DirectionalLight3D
             {
                 Name = "ContraLuzDaMao",
-                LightColor = new Color(0.62f, 0.68f, 0.85f),
-                // subiu de 0,15: é a luz que separa a silhueta da luva do
-                // fundo preto. Sem ela, luva escura em corredor escuro some
+                LightColor = new Color(0.70f, 0.74f, 0.86f),
+                // é a luz que separa a silhueta do fundo preto. Sem ela, braço
+                // escuro em corredor escuro some
                 LightEnergy = 0.42f,
                 ShadowEnabled = false,
                 LightCullMask = CamadaDaMao
